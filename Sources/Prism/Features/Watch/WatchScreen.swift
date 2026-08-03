@@ -110,6 +110,18 @@ struct WatchScreen: View {
             if settings.ambientGlow {
                 AmbientGlow(image: glow.image, intensity: 0.4, blur: 70)
                     .scaleEffect(1.3)
+                    // Without a mask the spill ends on a hard rectangular edge
+                    // that reads as a lighter panel behind the title.
+                    .mask(
+                        LinearGradient(
+                            stops: [
+                                .init(color: .white, location: 0),
+                                .init(color: .white, location: 0.55),
+                                .init(color: .clear, location: 1),
+                            ],
+                            startPoint: .top, endPoint: .bottom
+                        )
+                    )
             }
         }
         .overlay(alignment: .bottom) {

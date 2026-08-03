@@ -45,6 +45,13 @@ actor ImageLoader {
         "\(url.absoluteString)|\(Int(size.width))x\(Int(size.height))"
     }
 
+    /// Memory-cache lookup only — never touches the network.
+    ///
+    /// Lets a view render a cached image immediately instead of fading it in.
+    func cached(for url: URL, targetSize: CGSize) -> UIImage? {
+        memory.object(forKey: key(url, targetSize) as NSString)
+    }
+
     func image(for url: URL, targetSize: CGSize) async -> UIImage? {
         let k = key(url, targetSize)
 
@@ -125,26 +132,45 @@ struct RemoteImage<Placeholder: View>: View {
     @ViewBuilder var placeholder: () -> Placeholder
 
     @State private var image: UIImage?
-    @State private var didAnimate = false
+    @State private var opacity: Double = 0
 
     var body: some View {
         ZStack {
+            // The placeholder stays mounted underneath rather than being
+            // swapped out by a transition. A `.transition` here would be
+            // driven by the same transaction as the placeholder's own
+            // `repeatForever` shimmer, and a repeating animation in the
+            // transaction can leave the fade stranded part-way — thumbnails
+            // render permanently washed out.
+            if image == nil {
+                placeholder()
+            }
+
             if let image {
                 Image(uiImage: image)
                     .resizable()
                     .aspectRatio(contentMode: contentMode)
-                    .transition(.opacity)
-            } else {
-                placeholder()
+                    .opacity(opacity)
             }
         }
         .task(id: url) { await load() }
-        .motion(Motion.quick, value: image != nil)
     }
 
     private func load() async {
         guard let url else { return }
-        image = await ImageLoader.shared.image(for: url, targetSize: targetSize)
+
+        // A cache hit renders instantly — animating in something that was
+        // already in memory just reads as slowness.
+        if let cached = await ImageLoader.shared.cached(for: url, targetSize: targetSize) {
+            image = cached
+            opacity = 1
+            return
+        }
+
+        let loaded = await ImageLoader.shared.image(for: url, targetSize: targetSize)
+        guard let loaded else { return }
+        image = loaded
+        withAnimation(.easeOut(duration: 0.22)) { opacity = 1 }
     }
 }
 
@@ -152,6 +178,11 @@ struct RemoteImage<Placeholder: View>: View {
 /// that a screen full of them doesn't strobe.
 struct ShimmerPlaceholder: View {
     @State private var phase: CGFloat = -1
+
+    /// Screenshot runs render the plain fill. A `repeatForever` animation means
+    /// the render loop never settles, so a captured frame can catch the sweep
+    /// mid-flight and look like a rendering fault rather than a loading state.
+    private var animates: Bool { !DemoData.isEnabled }
 
     var body: some View {
         Rectangle()
@@ -168,6 +199,9 @@ struct ShimmerPlaceholder: View {
             }
             .clipped()
             .onAppear {
+                guard animates else { return }
+                // Scoped to its own transaction so the repeating animation
+                // can't be inherited by anything drawn alongside it.
                 withAnimation(.linear(duration: 1.4).repeatForever(autoreverses: false)) {
                     phase = 1
                 }

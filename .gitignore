@@ -1,0 +1,8 @@
+# Generated in CI — never committed, since this repo is authored on Linux.
+*.xcodeproj/
+*.xcworkspace/
+build/
+DerivedData/
+Payload/
+*.ipa
+.DS_Store

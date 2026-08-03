@@ -1,0 +1,80 @@
+name: Build
+
+# The author works on Linux and has no Mac, so this workflow is the compiler.
+# Every push gets built against the real iOS SDK here.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build unsigned IPA
+    runs-on: macos-15
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: |
+          ls /Applications | grep -i xcode || true
+          sudo xcode-select -s /Applications/Xcode.app
+          xcodebuild -version
+          echo "--- SDKs ---"
+          xcodebuild -showsdks | grep -i iphoneos || true
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        run: |
+          xcodegen generate --spec project.yml
+          echo "--- generated ---"
+          ls -la Prism.xcodeproj
+
+      - name: Build (unsigned)
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -project Prism.xcodeproj \
+            -scheme Prism \
+            -configuration Release \
+            -sdk iphoneos \
+            -derivedDataPath build \
+            -destination 'generic/platform=iOS' \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            ONLY_ACTIVE_ARCH=NO \
+            build 2>&1 | xcbeautify --renderer github-actions || {
+              echo "::error::Build failed"
+              exit 1
+            }
+
+      - name: Package .ipa
+        run: |
+          APP_PATH="build/Build/Products/Release-iphoneos/Prism.app"
+          if [ ! -d "$APP_PATH" ]; then
+            echo "::error::No .app produced at $APP_PATH"
+            find build -name "*.app" -maxdepth 6 || true
+            exit 1
+          fi
+          # An .ipa is just a zip with the app inside Payload/.
+          mkdir -p Payload
+          cp -R "$APP_PATH" Payload/
+          zip -qry Prism.ipa Payload
+          echo "--- built ---"
+          ls -lh Prism.ipa
+
+      - name: Upload IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: Prism-unsigned-ipa
+          path: Prism.ipa
+          retention-days: 30

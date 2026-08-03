@@ -1,0 +1,278 @@
+import SwiftUI
+import AVFoundation
+
+@MainActor
+@Observable
+final class ShortsModel {
+    private(set) var videos: [Video] = []
+    private(set) var isLoading = true
+
+    func load() async {
+        isLoading = true
+        if let page = try? await FeedRepository.shared.shorts() {
+            videos = page.videos
+        }
+        isLoading = false
+    }
+}
+
+/// The vertical feed.
+///
+/// Built on `TabView(.page)` rotated 90°, which gets UIKit's paging scroll view
+/// and its momentum for free.
+///
+/// The performance work is in `ShortsPlayerPool`: only three `AVPlayer`s ever
+/// exist, and the neighbouring items are pre-rolled so a swipe starts playing
+/// immediately instead of buffering after the gesture lands.
+struct ShortsScreen: View {
+    @Environment(Settings.self) private var settings
+    @State private var model = ShortsModel()
+    @State private var pool = ShortsPlayerPool()
+    @State private var index = 0
+
+    var body: some View {
+        GeometryReader { geo in
+            ZStack {
+                Color.black.ignoresSafeArea()
+
+                if model.videos.isEmpty {
+                    if model.isLoading {
+                        ProgressView().tint(.white)
+                    } else {
+                        EmptyState(
+                            icon: "play.square.stack",
+                            title: "No shorts right now",
+                            message: "Pull the feed again in a moment."
+                        )
+                    }
+                } else {
+                    TabView(selection: $index) {
+                        ForEach(Array(model.videos.enumerated()), id: \.element.id) { i, video in
+                            ShortCell(
+                                video: video,
+                                player: pool.player(for: i),
+                                isCurrent: i == index
+                            )
+                            .frame(width: geo.size.width, height: geo.size.height)
+                            .rotationEffect(.degrees(-90))
+                            .tag(i)
+                        }
+                    }
+                    .frame(width: geo.size.height, height: geo.size.width)
+                    .rotationEffect(.degrees(90), anchor: .topLeading)
+                    .offset(x: geo.size.width)
+                    .tabViewStyle(.page(indexDisplayMode: .never))
+                }
+            }
+        }
+        .ignoresSafeArea()
+        .task {
+            await model.load()
+            pool.configure(videos: model.videos)
+            await pool.activate(index: 0)
+        }
+        .onChange(of: index) { _, new in
+            Haptics.selection()
+            Task { await pool.activate(index: new) }
+        }
+        .onDisappear { pool.pauseAll() }
+    }
+}
+
+/// One full-screen short.
+struct ShortCell: View {
+    let video: Video
+    let player: AVPlayer?
+    let isCurrent: Bool
+
+    @State private var isLiked = false
+
+    var body: some View {
+        ZStack {
+            // The thumbnail sits underneath permanently: while the player is
+            // still buffering it stands in for the video, so a swipe never lands
+            // on a black rectangle.
+            RemoteImage(url: video.thumbnailURL, targetSize: CGSize(width: 720, height: 1280), contentMode: .fill) {
+                Color.black
+            }
+            .blur(radius: 18)
+            .overlay(Color.black.opacity(0.35))
+
+            if let player {
+                VideoSurface(player: player, gravity: .resizeAspectFill)
+            }
+
+            overlay
+        }
+        .clipped()
+    }
+
+    private var overlay: some View {
+        VStack {
+            Spacer()
+            HStack(alignment: .bottom, spacing: Metrics.Space.lg) {
+                VStack(alignment: .leading, spacing: Metrics.Space.sm) {
+                    Text(video.channelName)
+                        .font(Type.bodyEmphasis)
+                        .foregroundStyle(.white)
+                    Text(video.title)
+                        .font(Type.meta)
+                        .foregroundStyle(.white.opacity(0.9))
+                        .lineLimit(2)
+                }
+
+                Spacer(minLength: 0)
+
+                VStack(spacing: Metrics.Space.lg) {
+                    ShortAction(icon: isLiked ? "heart.fill" : "heart",
+                                tint: isLiked ? Palette.live : .white) {
+                        isLiked.toggle()
+                        Haptics.impact(.medium)
+                    }
+                    ShortAction(icon: "bubble.right") {}
+                    ShortAction(icon: "square.and.arrow.up") {}
+                }
+            }
+            .padding(.horizontal, Metrics.gutter)
+            .padding(.bottom, TabBar.height + Metrics.Space.xl)
+        }
+        .background {
+            LinearGradient(colors: [.clear, .black.opacity(0.55)],
+                           startPoint: .center, endPoint: .bottom)
+            .allowsHitTesting(false)
+        }
+    }
+}
+
+struct ShortAction: View {
+    let icon: String
+    var tint: Color = .white
+    var action: () -> Void
+
+    @State private var bump = false
+
+    var body: some View {
+        Button {
+            action()
+            withAnimation(Motion.pop) { bump.toggle() }
+        } label: {
+            Image(systemName: icon)
+                .font(.system(size: 24, weight: .medium))
+                .foregroundStyle(tint)
+                .shadow(color: .black.opacity(0.4), radius: 6)
+                .scaleEffect(bump ? 1.18 : 1)
+                .frame(width: 46, height: 46)
+        }
+        .motion(Motion.pop, value: bump)
+    }
+}
+
+/// Keeps at most three players alive: previous, current, next.
+///
+/// A player per cell would exhaust the decoder session limit within a dozen
+/// swipes and stall the feed. Pre-rolling the neighbours is what makes the swipe
+/// feel instant rather than merely fast.
+@MainActor
+@Observable
+final class ShortsPlayerPool {
+    private var players: [Int: AVPlayer] = [:]
+    private var videos: [Video] = []
+    private var prepareTasks: [Int: Task<Void, Never>] = [:]
+
+    func configure(videos: [Video]) {
+        self.videos = videos
+    }
+
+    func player(for index: Int) -> AVPlayer? { players[index] }
+
+    func activate(index: Int) async {
+        // Drop anything outside the window so decoders are released promptly.
+        let keep = Set([index - 1, index, index + 1])
+        for (i, player) in players where !keep.contains(i) {
+            player.pause()
+            player.replaceCurrentItem(with: nil)
+            players[i] = nil
+            prepareTasks[i]?.cancel()
+            prepareTasks[i] = nil
+        }
+
+        for i in keep where i >= 0 && i < videos.count {
+            await prepare(i)
+        }
+
+        for (i, player) in players {
+            if i == index {
+                player.seek(to: .zero)
+                player.play()
+            } else {
+                player.pause()
+            }
+        }
+    }
+
+    private func prepare(_ index: Int) async {
+        guard players[index] == nil, prepareTasks[index] == nil,
+              index >= 0, index < videos.count
+        else { return }
+
+        let video = videos[index]
+        let task = Task { [weak self] in
+            guard let source = try? await InnerTubeClient.shared.player(videoID: video.id) else { return }
+            // Shorts are small; the progressive rendition is the right trade —
+            // one file, no compositing, fastest possible start.
+            guard let stream = StreamSelector.fastStart(from: source)
+                ?? StreamSelector.select(from: source, quality: .p720).video
+            else { return }
+
+            guard !Task.isCancelled else { return }
+
+            let item = AVPlayerItem(url: stream.url)
+            item.preferredForwardBufferDuration = 4
+            let player = AVPlayer(playerItem: item)
+            player.isMuted = false
+            player.actionAtItemEnd = .none
+
+            // Shorts loop.
+            NotificationCenter.default.addObserver(
+                forName: .AVPlayerItemDidPlayToEndTime,
+                object: item,
+                queue: .main
+            ) { _ in
+                player.seek(to: .zero)
+                player.play()
+            }
+
+            await MainActor.run { self?.players[index] = player }
+        }
+
+        prepareTasks[index] = task
+        await task.value
+        prepareTasks[index] = nil
+    }
+
+    func pauseAll() {
+        players.values.forEach { $0.pause() }
+    }
+}
+
+struct EmptyState: View {
+    let icon: String
+    let title: String
+    let message: String
+
+    var body: some View {
+        VStack(spacing: Metrics.Space.md) {
+            Image(systemName: icon)
+                .font(.system(size: 34, weight: .light))
+                .foregroundStyle(Palette.textTertiary)
+            Text(title)
+                .font(Type.title(17))
+                .foregroundStyle(Palette.textPrimary)
+            Text(message)
+                .font(Type.meta)
+                .foregroundStyle(Palette.textSecondary)
+                .multilineTextAlignment(.center)
+        }
+        .padding(Metrics.Space.huge)
+    }
+}

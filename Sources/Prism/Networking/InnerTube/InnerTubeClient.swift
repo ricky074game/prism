@@ -183,11 +183,27 @@ actor InnerTubeClient {
             let source = try await resolve(videoID: videoID, profile: .visionOS)
             if source.hlsManifestURL != nil || !source.streams.isEmpty { return source }
         } catch let error as InnerTubeError {
-            // An explicit "you can't watch this" is final — don't retry it
-            // against another client and produce a confusing second failure.
-            if case .unplayable = error { throw error }
+            // An explicit "you can't watch this" is usually final — but a
+            // helper server can reach content no in-app client can, so try that
+            // before giving up on the user's behalf.
+            if case .unplayable = error {
+                if HelperClient.isConfigured,
+                   let viaHelper = try? await HelperClient.shared.resolve(videoID: videoID) {
+                    return viaHelper
+                }
+                throw error
+            }
         }
 
+        if let source = try? await resolve(videoID: videoID, profile: .androidVR) {
+            return source
+        }
+
+        // Last resort. Reached when every in-app client failed for a reason
+        // other than an explicit refusal.
+        if HelperClient.isConfigured {
+            return try await HelperClient.shared.resolve(videoID: videoID)
+        }
         return try await resolve(videoID: videoID, profile: .androidVR)
     }
 

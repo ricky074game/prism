@@ -82,6 +82,8 @@ struct SettingsScreen: View {
                     }
                 }
 
+                HelperServerSection()
+
                 section("ABOUT") {
                     row("Version") {
                         Text("1.0").font(Type.meta).foregroundStyle(Palette.textTertiary)

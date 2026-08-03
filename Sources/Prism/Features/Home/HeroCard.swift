@@ -55,6 +55,20 @@ struct HeroCard: View {
                 AmbientGlow(image: glow.image, intensity: 0.5, blur: 48)
                     .scaleEffect(1.12)
                     .offset(y: 10)
+                    // Faded at both ends, so the spill reads as light coming off
+                    // the artwork rather than a tinted panel with a visible edge
+                    // running under the title.
+                    .mask(
+                        LinearGradient(
+                            stops: [
+                                .init(color: .clear, location: 0),
+                                .init(color: .white, location: 0.25),
+                                .init(color: .white, location: 0.6),
+                                .init(color: .clear, location: 1),
+                            ],
+                            startPoint: .top, endPoint: .bottom
+                        )
+                    )
                     .opacity(appeared ? 1 : 0)
                     .animation(Motion.ambient, value: glow.image != nil)
             }

@@ -125,6 +125,7 @@ struct PlayerControls: View {
                 buffered: player.bufferedProgress,
                 duration: player.duration,
                 segments: player.segments,
+                chapters: player.chapters.map(\.start),
                 onScrub: { _ in cancelHide() },
                 onScrubEnd: { p in
                     player.seek(to: p * player.duration)
@@ -132,15 +133,26 @@ struct PlayerControls: View {
                 }
             )
 
-            HStack {
+            HStack(spacing: Metrics.Space.sm) {
                 Text(player.currentTime.timecode)
                     .font(Type.readout)
                     .foregroundStyle(.white)
-                Spacer()
+
+                if let chapter = player.currentChapter {
+                    Text(chapter.title)
+                        .font(Type.labelSmall)
+                        .foregroundStyle(.white.opacity(0.75))
+                        .lineLimit(1)
+                        .transition(.opacity)
+                }
+
+                Spacer(minLength: 0)
+
                 Text(player.duration.timecode)
                     .font(Type.readout)
                     .foregroundStyle(.white.opacity(0.6))
             }
+            .motion(Motion.quick, value: player.currentChapter?.id)
         }
         .padding(.horizontal, Metrics.Space.lg)
         .padding(.bottom, Metrics.Space.md)
@@ -170,6 +182,9 @@ struct PlayerControls: View {
     private func scheduleHide() {
         hideTask?.cancel()
         guard player.isPlaying else { return }
+        // Screenshot runs keep the controls up — the scrubber is the thing
+        // worth photographing.
+        guard !DemoData.isEnabled else { return }
         hideTask = Task {
             try? await Task.sleep(for: .seconds(3))
             guard !Task.isCancelled else { return }

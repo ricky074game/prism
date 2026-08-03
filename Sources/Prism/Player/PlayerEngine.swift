@@ -38,7 +38,17 @@ final class PlayerEngine {
     private(set) var lastSkip: SponsorSegment?
 
     var segments: [SponsorSegment] = []
+    var chapters: [Chapter] = []
     var categoryActions: [SegmentCategory: SegmentAction] = [:]
+
+    /// The chapter containing the playhead, shown above the scrubber.
+    var currentChapter: Chapter? {
+        chapters.last { $0.start <= currentTime }
+    }
+
+    /// True once there is a real item that can put pixels on screen. Drives the
+    /// poster-frame crossfade.
+    private(set) var hasVideo = false
 
     var progress: Double { duration > 0 ? currentTime / duration : 0 }
     var bufferedProgress: Double { duration > 0 ? bufferedTime / duration : 0 }
@@ -93,7 +103,9 @@ final class PlayerEngine {
         self.source = source
         self.duration = source.duration
         self.currentQuality = quality
+        self.chapters = source.chapters
         self.error = nil
+        self.hasVideo = false
         upgradeTask?.cancel()
 
         // Best path: one HLS manifest. AVPlayer handles bitrate adaptation,
@@ -264,6 +276,16 @@ final class PlayerEngine {
                 if status == .failed {
                     self?.error = item.error?.localizedDescription ?? "Playback failed."
                 }
+            }
+            .store(in: &cancellables)
+
+        // `isPlaybackLikelyToKeepUp` is the honest signal that pixels are
+        // coming — `.readyToPlay` fires before the first frame is decoded, and
+        // crossfading the poster on that shows a black flash.
+        item.publisher(for: \.isPlaybackLikelyToKeepUp)
+            .receive(on: RunLoop.main)
+            .sink { [weak self] ready in
+                if ready { self?.hasVideo = true }
             }
             .store(in: &cancellables)
 

@@ -229,6 +229,9 @@ actor InnerTubeClient {
 
         guard hls != nil || !streams.isEmpty else { throw InnerTubeError.noFormats }
 
+        let description = details["shortDescription"] as? String
+        let chapters = ChapterParser.chapters(from: json, description: description)
+
         return PlaybackSource(
             videoID: videoID,
             title: details["title"] as? String ?? "",
@@ -238,7 +241,9 @@ actor InnerTubeClient {
             isLive: details["isLiveContent"] as? Bool ?? false,
             viewCount: Int(details["viewCount"] as? String ?? "") ?? 0,
             streams: streams,
-            hlsManifestURL: hls
+            hlsManifestURL: hls,
+            description: description,
+            chapters: chapters
         )
     }
 

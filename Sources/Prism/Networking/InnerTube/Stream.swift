@@ -86,6 +86,8 @@ struct PlaybackSource: Sendable {
     /// codecs it can't decode and adapts across the rest on its own, so it can
     /// be handed straight to an `AVPlayerItem` with nothing else to arrange.
     let hlsManifestURL: URL?
+    let description: String?
+    let chapters: [Chapter]
 
     var playable: [Stream] { streams.filter(\.isPlayableByAVFoundation) }
 

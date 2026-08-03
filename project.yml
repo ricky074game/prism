@@ -48,7 +48,16 @@ targets:
       path: Sources/Prism/Info.plist
       properties:
         CFBundleDisplayName: Prism
+        # Required for the app to get the full screen. Without a UILaunchScreen
+        # key iOS runs the app letterboxed in a compatibility-sized window.
+        UILaunchScreen:
+          UIColorName: ""
         UIBackgroundModes: [audio]
+        # Registered at launch, before the first view renders. Static instances
+        # cut from the Archivo variable font at wdth 125 / 112.
+        UIAppFonts:
+          - Archivo-Expanded.ttf
+          - Archivo-SemiExpanded.ttf
         # Stream hosts are plain HTTPS, but googlevideo redirects across
         # subdomains; forward secrecy exceptions keep AVFoundation happy.
         NSAppTransportSecurity:

@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 /// PRISM's type system.
 ///
@@ -55,14 +56,29 @@ enum Type {
 // MARK: - Font registration
 
 enum FontLoader {
-    /// Registers the bundled variable font's named instances.
+    /// Verifies the bundled faces registered.
     ///
-    /// Called once at launch. Registration is cheap (the file is mmap'd, not
-    /// parsed) so this does not meaningfully affect cold start.
-    static func register() {
-        for name in ["Archivo-Expanded", "Archivo-SemiExpanded"] {
-            guard let url = Bundle.main.url(forResource: name, withExtension: "ttf") else { continue }
-            CTFontManagerRegisterFontsForURL(url as CFURL, .process, nil)
+    /// `UIAppFonts` in Info.plist does the actual registration at launch. This
+    /// only checks the result, because a missing custom font fails *silently* —
+    /// SwiftUI substitutes the system face and the app looks subtly wrong with
+    /// nothing in the log to explain why.
+    @discardableResult
+    static func register() -> Bool {
+        let required = ["Archivo-Expanded", "Archivo-SemiExpanded"]
+        let available = Set(UIFont.familyNames.flatMap { UIFont.fontNames(forFamilyName: $0) })
+        let missing = required.filter { !available.contains($0) }
+
+        if !missing.isEmpty {
+            // Registering by URL recovers the case where the font shipped but
+            // wasn't listed in UIAppFonts.
+            for name in missing {
+                guard let url = Bundle.main.url(forResource: name, withExtension: "ttf") else {
+                    assertionFailure("Missing bundled font: \(name).ttf")
+                    continue
+                }
+                CTFontManagerRegisterFontsForURL(url as CFURL, .process, nil)
+            }
         }
+        return missing.isEmpty
     }
 }

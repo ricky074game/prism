@@ -30,11 +30,18 @@ struct HeroCard: View {
     }
 
     private var artwork: some View {
-        RemoteImage(url: video.thumbnailURL, targetSize: CGSize(width: 800, height: 450)) {
-            ShimmerPlaceholder()
-        }
-        .aspectRatio(16 / 9, contentMode: .fill)
-        .clipShape(RoundedRectangle(cornerRadius: Metrics.Radius.sheet, style: .continuous))
+        // The aspect ratio has to be enforced on a *container* the image fills,
+        // not on the image itself. Applying it to `RemoteImage` sizes the view
+        // to the loaded bitmap's own ratio instead — YouTube's 4:3-padded
+        // thumbnails then leave black bars inside the rounded rect.
+        Color.clear
+            .aspectRatio(16 / 9, contentMode: .fit)
+            .overlay {
+                RemoteImage(url: video.thumbnailURL, targetSize: CGSize(width: 800, height: 450)) {
+                    ShimmerPlaceholder()
+                }
+            }
+            .clipShape(RoundedRectangle(cornerRadius: Metrics.Radius.sheet, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: Metrics.Radius.sheet, style: .continuous)
                 .strokeBorder(.white.opacity(0.08))

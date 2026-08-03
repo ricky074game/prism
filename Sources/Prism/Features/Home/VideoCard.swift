@@ -28,11 +28,16 @@ struct VideoCard: View {
     }
 
     private var thumbnail: some View {
-        RemoteImage(url: video.thumbnailURL, targetSize: Self.thumbSize) {
-            ShimmerPlaceholder()
-        }
-        .aspectRatio(16 / 9, contentMode: .fill)
-        .clipShape(RoundedRectangle(cornerRadius: Metrics.Radius.card, style: .continuous))
+        // Ratio enforced by the container, so a thumbnail that isn't exactly
+        // 16:9 fills the frame instead of letterboxing inside it.
+        Color.clear
+            .aspectRatio(16 / 9, contentMode: .fit)
+            .overlay {
+                RemoteImage(url: video.thumbnailURL, targetSize: Self.thumbSize) {
+                    ShimmerPlaceholder()
+                }
+            }
+            .clipShape(RoundedRectangle(cornerRadius: Metrics.Radius.card, style: .continuous))
         .overlay(alignment: .bottomTrailing) { durationBadge }
         .overlay {
             RoundedRectangle(cornerRadius: Metrics.Radius.card, style: .continuous)
@@ -143,12 +148,14 @@ struct VideoRow: View {
     var body: some View {
         Button(action: onTap) {
             HStack(alignment: .top, spacing: Metrics.Space.md) {
-                RemoteImage(url: video.thumbnailURL, targetSize: CGSize(width: 320, height: 180)) {
-                    ShimmerPlaceholder()
-                }
-                .aspectRatio(16 / 9, contentMode: .fill)
-                .frame(width: 152)
-                .clipShape(RoundedRectangle(cornerRadius: Metrics.Radius.md, style: .continuous))
+                Color.clear
+                    .frame(width: 152, height: 152 * 9 / 16)
+                    .overlay {
+                        RemoteImage(url: video.thumbnailURL, targetSize: CGSize(width: 320, height: 180)) {
+                            ShimmerPlaceholder()
+                        }
+                    }
+                    .clipShape(RoundedRectangle(cornerRadius: Metrics.Radius.md, style: .continuous))
                 .overlay(alignment: .bottomTrailing) {
                     if video.duration > 0 && !video.isLive {
                         Text(video.durationText)

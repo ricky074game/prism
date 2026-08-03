@@ -84,6 +84,14 @@ struct WatchScreen: View {
         ZStack {
             Color.black
 
+            // Poster frame. Sits under the video layer for the whole session:
+            // until the first frame decodes, the thumbnail stands in, so opening
+            // a video never shows a black rectangle.
+            RemoteImage(url: video.thumbnailURL, targetSize: CGSize(width: 800, height: 450), contentMode: .fit) {
+                Color.black
+            }
+            .opacity(player.hasVideo ? 0 : 1)
+
             VideoSurface(player: player.player, gravity: .resizeAspect)
 
             if player.isBuffering {

@@ -282,4 +282,10 @@ actor InnerTubeClient {
     func next(videoID: String) async throws -> [String: Any] {
         try await post("next", body: ["videoId": videoID], profile: .web)
     }
+
+    /// Redeems a continuation token — the next page of comments, replies, or a
+    /// re-sorted comment list.
+    func next(continuation: String) async throws -> [String: Any] {
+        try await post("next", body: ["continuation": continuation], profile: .web)
+    }
 }

@@ -54,6 +54,73 @@ enum DemoData {
                        actionType: "skip", locked: true, votes: 61),
     ]
 
+    static let comments: [Comment] = [
+        Comment(
+            id: "c1",
+            text: "The bit at 4:12 where the whole thing resonates and then just… stops. I've watched it six times.",
+            authorName: "@practicalengineering",
+            authorAvatarURL: nil,
+            authorChannelID: "UC1",
+            isVerified: true,
+            isCreator: true,
+            likeText: "12K",
+            replyCount: 84,
+            publishedText: "2 months ago",
+            isPinned: true,
+            isHearted: false,
+            replyLevel: 0,
+            repliesToken: "demo-replies"
+        ),
+        Comment(
+            id: "c2",
+            text: "Rendered this on a 2014 Mac Mini overnight as a test. Took eleven hours. Worth it.",
+            authorName: "@fern",
+            authorAvatarURL: nil,
+            authorChannelID: "UC2",
+            isVerified: false,
+            isCreator: false,
+            likeText: "3.4K",
+            replyCount: 12,
+            publishedText: "3 weeks ago",
+            isPinned: false,
+            isHearted: true,
+            replyLevel: 0,
+            repliesToken: "demo-replies"
+        ),
+        Comment(
+            id: "c3",
+            text: "Genuinely the clearest explanation of this I've found, and I say that having sat through a semester of it.",
+            authorName: "@quietmachines",
+            authorAvatarURL: nil,
+            authorChannelID: "UC3",
+            isVerified: false,
+            isCreator: false,
+            likeText: "941",
+            replyCount: 0,
+            publishedText: "5 days ago",
+            isPinned: false,
+            isHearted: false,
+            replyLevel: 0,
+            repliesToken: nil
+        ),
+        Comment(
+            id: "c4",
+            text: "Came for the render, stayed for the tangent about bearing tolerances.",
+            authorName: "@oldgrowth",
+            authorAvatarURL: nil,
+            authorChannelID: "UC4",
+            isVerified: false,
+            isCreator: false,
+            likeText: "228",
+            replyCount: 3,
+            publishedText: "1 day ago",
+            isPinned: false,
+            isHearted: false,
+            replyLevel: 0,
+            repliesToken: "demo-replies"
+        ),
+    ]
+
     private static func make(
         _ id: String, _ title: String, _ channel: String,
         _ duration: Double, _ views: String, _ published: String

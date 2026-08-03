@@ -62,6 +62,7 @@ struct WatchScreen: View {
     @State private var dragOffset: CGFloat = 0
     @State private var isLiked = false
     @State private var showDescription = false
+    @State private var showComments = false
 
     var body: some View {
         GeometryReader { geo in
@@ -217,6 +218,7 @@ struct WatchScreen: View {
                     .background(Capsule().fill(Palette.surface))
                 }
 
+                PillButton(icon: "bubble.left", title: "Comments") { showComments = true }
                 PillButton(icon: "text.alignleft", title: "Description") { showDescription = true }
             }
             .padding(.horizontal, 2)
@@ -227,6 +229,10 @@ struct WatchScreen: View {
                 DescriptionSheet(source: source) { player.seek(to: $0) }
                     .presentationDetents([.medium, .large])
             }
+        }
+        .sheet(isPresented: $showComments) {
+            CommentsSheet(video: video)
+                .presentationDetents([.medium, .large])
         }
     }
 

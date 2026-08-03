@@ -51,7 +51,7 @@ struct AccountScreen: View {
                     icon: "checkmark.circle.fill",
                     tint: Palette.success,
                     title: "Signed in",
-                    detail: session.accountName ?? "Your YouTube session is active."
+                    detail: "Age-restricted videos and your history are available."
                 )
 
                 Button(role: .destructive) {

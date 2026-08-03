@@ -118,35 +118,39 @@ shows them separately instead of behind one button.
 
 | | Mechanism | Unlocks |
 |---|---|---|
-| **YouTube session** | cookies → `SAPISIDHASH` | age-restricted videos, watch history, Watch Later, a personal home feed |
+| **YouTube account** | TV device-code OAuth → `Bearer` | age-restricted videos, watch history, Watch Later, a personal home feed |
 | **Google account** | OAuth 2.0 + PKCE | subscription list, liking, subscribing, playlist edits |
 
-The distinction matters because **InnerTube ignores OAuth bearer tokens.** The
-endpoint that returns video streams authenticates with a signature derived from
-session cookies:
+### Why not cookies
 
-```
-SHA1("<unix seconds> <SAPISID> https://www.youtube.com")
-  → Authorization: SAPISIDHASH <unix seconds>_<hex>
-```
+The obvious approach is to sign in through a web view, keep the Google cookies,
+and send a `SAPISIDHASH` header. It does not work here, and the failure is
+silent rather than loud.
 
-recomputed per request, because the timestamp is part of the hashed input. Only
-this path can lift the age gate, so "sign in with Google" alone was never going
-to make restricted videos play.
+Tested directly: `VISIONOS` returns **identical anonymous results** whether that
+header is correct, deliberately wrong, or absent entirely. It never validates
+it. The headset and mobile clients don't support cookie auth at all — only the
+WEB-family clients do, and those now require a BotGuard PO token and JavaScript
+signature solving, and give up the HLS manifest that makes playback simple.
 
-Sign-in loads Google's own page in a web view. Credentials never touch this app,
-and two-factor and passkeys keep working. Cookies stay on-device and are sent
-only to youtube.com.
+The same clients *do* validate `Authorization: Bearer` — a bogus token produces
+a hard 401 naming OAuth explicitly. So Prism uses the flow a television uses: it
+shows a short code, you type it at **google.com/device**, and the app polls until
+you approve.
 
-**The risk is real.** Using any third-party client with your account breaks
-YouTube's Terms of Service, and accounts have been flagged for it. The app says
-so on the sign-in screen. Use a secondary account if that would cost you
-something.
+That keeps `VISIONOS` and its HLS manifest, needs no web view, no cookie jar, no
+PO token and no JavaScript — and your password is never typed into this app.
+Access is revocable from your Google account page like any other device.
+
+**The risk is still real.** Using any third-party client with your account
+breaks YouTube's Terms of Service, and accounts have been flagged for it. The
+app says so on the sign-in screen. Use a secondary account if that would cost
+you something.
 
 To enable the Google-account half, register an iOS OAuth client (bundle ID
 `com.prism.client`) in Google Cloud Console and put the ID in `Secrets.swift`.
 The consent screen can stay in Testing mode — no verification needed. The
-YouTube session works without any of that.
+YouTube sign-in works without any of that.
 
 ## Status
 
@@ -157,10 +161,35 @@ quality selection, likes, background audio, both sign-ins.
 Not built: uploading, live chat, and the AI summary features — the last
 deliberately.
 
-Age-restricted videos play once signed in with a YouTube session on an account
-old enough to watch them. "Made for kids" videos remain unreliable; the clients
-that return unsigned stream URLs refuse them, and the app says so rather than
-failing silently.
+Age-restricted videos play once signed in, on an account old enough to watch
+them.
+
+**"Made for kids" videos need the optional helper server.** This is a client
+capability limit, not an authentication one — established by testing: they
+return `UNPLAYABLE` on `VISIONOS`, `ANDROID_VR`, `TVHTML5` and `WEB`, and
+generating a real BotGuard PO token doesn't change it. With a valid token the
+WEB client resolves titles but still returns zero stream URLs, even for videos
+that play fine elsewhere. The blocker is SABR delivery. `server/` handles it —
+see below.
+
+## The optional helper server
+
+Everything above works on-device. `server/` exists for the small remainder:
+made-for-kids videos, and anything Google moves to SABR-only delivery where
+formats carry no URL at all.
+
+It wraps yt-dlp in about a hundred lines of Node. The app calls it **only after
+direct extraction has already failed**, so with no server configured nothing
+changes — it's a safety net, not a dependency, and it doubles as insurance for
+whenever Google gates another client.
+
+```bash
+cd server && node server.js     # needs yt-dlp and Node on the machine
+```
+
+Then put its address into Settings → Helper server and press Test connection.
+Verified end to end: Baby Shark resolves at 1080p H.264 + AAC, both URLs serving
+`HTTP 206`, with cached lookups returning in ~10ms.
 
 ## A note on formats
 

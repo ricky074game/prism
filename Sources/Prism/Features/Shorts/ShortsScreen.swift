@@ -202,7 +202,7 @@ final class ShortsPlayerPool {
 
         for (i, player) in players {
             if i == index {
-                player.seek(to: .zero)
+                player.seek(to: .zero, completionHandler: { _ in })
                 player.play()
             } else {
                 player.pause()
@@ -232,14 +232,17 @@ final class ShortsPlayerPool {
             player.isMuted = false
             player.actionAtItemEnd = .none
 
-            // Shorts loop.
+            // Shorts loop. The completion-handler form of `seek` is used
+            // deliberately: the bare `seek(to:)` resolves to the `async`
+            // overload inside a `@Sendable` closure and won't compile here.
             NotificationCenter.default.addObserver(
                 forName: .AVPlayerItemDidPlayToEndTime,
                 object: item,
                 queue: .main
             ) { _ in
-                player.seek(to: .zero)
-                player.play()
+                player.seek(to: .zero, completionHandler: { _ in
+                    player.play()
+                })
             }
 
             await MainActor.run { self?.players[index] = player }

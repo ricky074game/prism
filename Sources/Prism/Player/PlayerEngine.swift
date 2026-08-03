@@ -49,7 +49,6 @@ final class PlayerEngine {
 
     private var source: PlaybackSource?
     private var timeObserver: Any?
-    private var boundaryObserver: Any?
     private var cancellables = Set<AnyCancellable>()
     private var upgradeTask: Task<Void, Never>?
     private var isSwapping = false
@@ -61,10 +60,11 @@ final class PlayerEngine {
         observePlayer()
     }
 
-    deinit {
-        if let timeObserver { player.removeTimeObserver(timeObserver) }
-        if let boundaryObserver { player.removeTimeObserver(boundaryObserver) }
-    }
+    // No `deinit` cleanup of time observers: the properties are main-actor
+    // isolated and `deinit` is nonisolated, so touching them there is a data
+    // race. `AVPlayer` releases its own observers when it deallocates, and the
+    // engine outlives every view that uses it, so an explicit `teardown()` is
+    // the right hook — not `deinit`.
 
     // MARK: Session
 
@@ -184,11 +184,17 @@ final class PlayerEngine {
             forInterval: CMTime(seconds: 0.25, preferredTimescale: 600),
             queue: .main
         ) { [weak self] time in
-            guard let self, !self.isSwapping else { return }
-            self.currentTime = time.seconds
-            self.updateBuffered()
-            self.checkSegments(at: time.seconds)
-            self.updateNowPlayingTime()
+            // The observer callback is `@Sendable`, but we asked for `.main`,
+            // so this genuinely runs on the main actor. `assumeIsolated` states
+            // that to the compiler rather than hopping through a `Task`, which
+            // would add a frame of latency to every scrubber update.
+            MainActor.assumeIsolated {
+                guard let self, !self.isSwapping else { return }
+                self.currentTime = time.seconds
+                self.updateBuffered()
+                self.checkSegments(at: time.seconds)
+                self.updateNowPlayingTime()
+            }
         }
 
         player.publisher(for: \.timeControlStatus)

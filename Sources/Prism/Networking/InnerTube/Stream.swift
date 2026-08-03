@@ -1,5 +1,6 @@
 import Foundation
 import AVFoundation
+import VideoToolbox
 
 /// One downloadable rendition of a video.
 struct Stream: Sendable, Identifiable, Equatable {

@@ -15,6 +15,7 @@ struct AccountScreen: View {
     @State private var session = AccountSession.shared
     @State private var auth = GoogleAuth.shared
     @State private var showSignOutConfirm = false
+    @State private var showConsent = false
 
     var body: some View {
         ScrollView {
@@ -30,6 +31,26 @@ struct AccountScreen: View {
         .background(Palette.ink.ignoresSafeArea())
         .navigationTitle("Account")
         .navigationBarTitleDisplayMode(.inline)
+        // Opens as soon as a code exists, so the normal path is: tap Sign in →
+        // Safari sheet with the code already filled → tap Allow → sheet closes.
+        .onChange(of: session.pendingCode) { _, code in
+            showConsent = code != nil
+        }
+        // Polling succeeded, so the sheet has served its purpose — close it
+        // rather than leaving the user to work out that they're done.
+        .onChange(of: session.isSignedIn) { _, signedIn in
+            if signedIn { showConsent = false }
+        }
+        .sheet(isPresented: $showConsent) {
+            if let url = session.pendingCode?.prefilledURL {
+                ConsentSheet(url: url) {
+                    // Dismissed by hand. Polling continues, because the consent
+                    // may still have been granted before they closed it.
+                    showConsent = false
+                }
+                .ignoresSafeArea()
+            }
+        }
         .confirmationDialog("Sign out of YouTube?", isPresented: $showSignOutConfirm, titleVisibility: .visible) {
             Button("Sign out", role: .destructive) {
                 session.signOut()
@@ -167,60 +188,56 @@ struct AccountScreen: View {
         )
     }
 
-    /// The code the user types on google.com/device.
+    /// Shown while waiting for approval.
     ///
-    /// The code itself is the hero of this panel — large, monospaced, and
-    /// letter-spaced, because it is read off one screen and typed into another.
-    /// Grouping is preserved exactly as Google issues it.
+    /// The consent page opens automatically with the code already filled in, so
+    /// in the normal case nobody reads this panel at all — they tap Allow in the
+    /// Safari sheet and it closes itself. The code stays visible as a fallback
+    /// for the case where the sheet was dismissed, or the pre-fill stops working.
     private func deviceCodePanel(_ code: AccountSession.DeviceCode) -> some View {
         VStack(spacing: Metrics.Space.lg) {
-            VStack(spacing: Metrics.Space.sm) {
-                Text("1. Go to")
-                    .font(Type.labelSmall)
-                    .foregroundStyle(Palette.textTertiary)
-
-                Text(code.verificationURL.replacingOccurrences(of: "https://", with: ""))
-                    .font(Type.bodyEmphasis)
-                    .foregroundStyle(Palette.disperse)
+            HStack(spacing: Metrics.Space.sm) {
+                ProgressView().controlSize(.small).tint(Palette.refract)
+                Text("Waiting for you to approve Prism…")
+                    .font(Type.metaEmphasis)
+                    .foregroundStyle(Palette.textPrimary)
             }
 
             VStack(spacing: Metrics.Space.sm) {
-                Text("2. Enter this code")
+                Text("If the page didn't open, go to google.com/device and enter")
                     .font(Type.labelSmall)
                     .foregroundStyle(Palette.textTertiary)
+                    .multilineTextAlignment(.center)
 
                 Text(code.userCode)
-                    .font(.system(size: 30, weight: .bold, design: .monospaced))
+                    .font(.system(size: 26, weight: .bold, design: .monospaced))
                     .tracking(3)
                     .foregroundStyle(Palette.textPrimary)
                     .textSelection(.enabled)
                     .padding(.horizontal, Metrics.Space.lg)
                     .padding(.vertical, Metrics.Space.md)
                     .background(Palette.surfaceRaised, in: RoundedRectangle(cornerRadius: Metrics.Radius.md, style: .continuous))
+                    // Read as three groups rather than eleven letters.
+                    .accessibilityLabel(code.userCode.map { String($0) }.joined(separator: " "))
             }
 
-            HStack(spacing: Metrics.Space.md) {
+            HStack(spacing: Metrics.Space.xl) {
                 Button {
                     UIPasteboard.general.string = code.userCode
                     Haptics.impact(.light)
                 } label: {
                     Label("Copy code", systemImage: "doc.on.doc")
                         .font(Type.labelSmall)
-                        .foregroundStyle(Palette.textPrimary)
+                        .foregroundStyle(Palette.textSecondary)
                 }
 
-                Link(destination: URL(string: code.verificationURL)!) {
-                    Label("Open page", systemImage: "arrow.up.right.square")
+                Button {
+                    showConsent = true
+                } label: {
+                    Label("Open page again", systemImage: "arrow.clockwise")
                         .font(Type.labelSmall)
                         .foregroundStyle(Palette.refract)
                 }
-            }
-
-            HStack(spacing: Metrics.Space.sm) {
-                ProgressView().controlSize(.small).tint(Palette.textTertiary)
-                Text("Waiting for you to approve it…")
-                    .font(Type.labelSmall)
-                    .foregroundStyle(Palette.textTertiary)
             }
 
             Button("Cancel") { session.cancelSignIn() }

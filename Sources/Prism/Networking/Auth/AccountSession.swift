@@ -52,6 +52,20 @@ final class AccountSession {
         let deviceCode: String
         let interval: Int
         let expiresAt: Date
+
+        /// The consent page with the code already filled in.
+        ///
+        /// The device flow was designed for televisions, where a second device
+        /// does the typing. Here both are the same phone, so there's no reason
+        /// to make anyone read a code off one screen and type it into another —
+        /// `google.com/device?user_code=` carries it through to the page, which
+        /// populates the field itself. The code is still shown as a fallback in
+        /// case the page ever stops honouring the parameter.
+        var prefilledURL: URL? {
+            var components = URLComponents(string: verificationURL)
+            components?.queryItems = [URLQueryItem(name: "user_code", value: userCode)]
+            return components?.url
+        }
     }
 
     private struct Token: Codable, Sendable {

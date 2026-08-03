@@ -62,7 +62,6 @@ struct WatchScreen: View {
     @State private var dragOffset: CGFloat = 0
     @State private var isLiked = false
     @State private var showDescription = false
-    @State private var showShare = false
 
     var body: some View {
         GeometryReader { geo in
@@ -193,7 +192,19 @@ struct WatchScreen: View {
                 }
                 PillButton(icon: "hand.thumbsdown", title: nil) {}
                 PillButton(icon: "bell", title: "Subscribe", prominent: true) {}
-                PillButton(icon: "square.and.arrow.up", title: "Share") { showShare = true }
+                // ShareLink presents the system share sheet itself, so it is
+                // the button rather than something a button opens.
+                ShareLink(item: URL(string: "https://youtu.be/\(video.id)")!) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "square.and.arrow.up").font(.system(size: 13, weight: .semibold))
+                        Text("Share").font(Type.label)
+                    }
+                    .foregroundStyle(Palette.textPrimary)
+                    .padding(.horizontal, Metrics.Space.md)
+                    .padding(.vertical, Metrics.Space.sm + 1)
+                    .background(Capsule().fill(Palette.surface))
+                }
+
                 PillButton(icon: "text.alignleft", title: "Description") { showDescription = true }
             }
             .padding(.horizontal, 2)
@@ -203,12 +214,6 @@ struct WatchScreen: View {
             if let source = model.source {
                 DescriptionSheet(source: source) { player.seek(to: $0) }
                     .presentationDetents([.medium, .large])
-            }
-        }
-        .sheet(isPresented: $showShare) {
-            if let url = URL(string: "https://youtu.be/\(video.id)") {
-                ShareLink(item: url) { Text("Share") }
-                    .presentationDetents([.medium])
             }
         }
     }

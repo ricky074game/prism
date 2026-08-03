@@ -8,6 +8,9 @@ struct PrismApp: App {
 
     init() {
         FontLoader.register()
+        // Sampled here, on the main actor, so the off-actor image decoder never
+        // has to touch UIScreen.
+        ImageLoader.screenScale = UIScreen.main.scale
         UIScrollView.appearance().keyboardDismissMode = .interactive
     }
 

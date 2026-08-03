@@ -102,34 +102,13 @@ final class PlayerEngine {
         //
         // Quality is still honoured — an explicit choice sets a bitrate ceiling
         // on the item rather than swapping to a different URL.
-        if quality == .auto, let hls = source.hlsManifestURL {
+        if let hls = source.hlsManifestURL {
             let item = AVPlayerItem(url: hls)
             item.preferredForwardBufferDuration = 8
-            observeItem(item)
-            player.replaceCurrentItem(with: item)
-            if startAt > 0 {
-                player.seek(to: CMTime(seconds: startAt, preferredTimescale: 600),
-                            toleranceBefore: .zero, toleranceAfter: .zero)
-            }
-            player.play()
-            isPlaying = true
-            return
-        }
-
-        if let hls = source.hlsManifestURL, quality != .auto {
-            let item = AVPlayerItem(url: hls)
-            item.preferredForwardBufferDuration = 8
-            // Cap the ladder rather than pin it: if the network can't sustain
-            // the chosen tier, dropping below it beats stalling.
+            // An explicit quality caps the ladder rather than pinning it: if the
+            // network can't sustain that tier, dropping below it beats stalling.
             item.preferredPeakBitRate = Self.bitrateCeiling(for: quality)
-            observeItem(item)
-            player.replaceCurrentItem(with: item)
-            if startAt > 0 {
-                player.seek(to: CMTime(seconds: startAt, preferredTimescale: 600),
-                            toleranceBefore: .zero, toleranceAfter: .zero)
-            }
-            player.play()
-            isPlaying = true
+            replaceItem(with: item, startAt: startAt)
             return
         }
 
@@ -218,20 +197,29 @@ final class PlayerEngine {
     }
 
     private func replaceItem(with asset: AVAsset, startAt: Double, preserveRate: Bool = false) {
-        let wasPlaying = preserveRate ? isPlaying : true
-        isSwapping = true
-
         let item = AVPlayerItem(asset: asset)
         // ~8s of read-ahead: enough to ride out a cell handover without holding
         // a huge buffer in memory.
         item.preferredForwardBufferDuration = 8
-        observeItem(item)
+        replaceItem(with: item, startAt: startAt, preserveRate: preserveRate)
+    }
 
+    private func replaceItem(with item: AVPlayerItem, startAt: Double, preserveRate: Bool = false) {
+        let wasPlaying = preserveRate ? isPlaying : true
+        isSwapping = true
+
+        observeItem(item)
         player.replaceCurrentItem(with: item)
 
         if startAt > 0 {
-            player.seek(to: CMTime(seconds: startAt, preferredTimescale: 600),
-                        toleranceBefore: .zero, toleranceAfter: .zero)
+            // Completion-handler form: the bare `seek` resolves to the `async`
+            // overload when this is reached from an async caller.
+            player.seek(
+                to: CMTime(seconds: startAt, preferredTimescale: 600),
+                toleranceBefore: .zero,
+                toleranceAfter: .zero,
+                completionHandler: { _ in }
+            )
         }
         if wasPlaying { player.play(); isPlaying = true }
         isSwapping = false

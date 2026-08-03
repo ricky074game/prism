@@ -77,10 +77,22 @@ actor ImageLoader {
         }
     }
 
+    /// Screen scale, captured once at launch.
+    ///
+    /// `UIScreen.main` is main-actor isolated and `downsample` runs off the main
+    /// actor by design, so this is read once from `PrismApp.init` rather than
+    /// per call. A lazy `static let` would be worse, not better: it initialises
+    /// on first *access*, which here is a background decode.
+    ///
+    /// 3.0 is the right default — every device with a notch or Dynamic Island
+    /// is @3x, and a wrong guess costs a slightly soft or slightly large
+    /// thumbnail for one frame, not a crash.
+    nonisolated(unsafe) static var screenScale: CGFloat = 3.0
+
     /// Decodes straight to the display size. The full-size bitmap is never
     /// materialised, so peak memory is bounded by the *displayed* size.
     nonisolated static func downsample(data: Data, to pointSize: CGSize) -> UIImage? {
-        let scale = UIScreen.main.scale
+        let scale = screenScale
         let maxPixel = max(pointSize.width, pointSize.height) * scale
         guard maxPixel > 0 else { return UIImage(data: data) }
 

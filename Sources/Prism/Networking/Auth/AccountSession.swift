@@ -1,4 +1,5 @@
 import Foundation
+import SwiftUI
 import WebKit
 import CryptoKit
 import Observation

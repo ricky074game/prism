@@ -111,16 +111,72 @@ Sources/Prism/
   Features/       home, watch, shorts, search, subscriptions, settings
 ```
 
+## Signing in
+
+There are two sign-ins, and they are not the same thing — which is why the app
+shows them separately instead of behind one button.
+
+| | Mechanism | Unlocks |
+|---|---|---|
+| **YouTube session** | cookies → `SAPISIDHASH` | age-restricted videos, watch history, Watch Later, a personal home feed |
+| **Google account** | OAuth 2.0 + PKCE | subscription list, liking, subscribing, playlist edits |
+
+The distinction matters because **InnerTube ignores OAuth bearer tokens.** The
+endpoint that returns video streams authenticates with a signature derived from
+session cookies:
+
+```
+SHA1("<unix seconds> <SAPISID> https://www.youtube.com")
+  → Authorization: SAPISIDHASH <unix seconds>_<hex>
+```
+
+recomputed per request, because the timestamp is part of the hashed input. Only
+this path can lift the age gate, so "sign in with Google" alone was never going
+to make restricted videos play.
+
+Sign-in loads Google's own page in a web view. Credentials never touch this app,
+and two-factor and passkeys keep working. Cookies stay on-device and are sent
+only to youtube.com.
+
+**The risk is real.** Using any third-party client with your account breaks
+YouTube's Terms of Service, and accounts have been flagged for it. The app says
+so on the sign-in screen. Use a secondary account if that would cost you
+something.
+
+To enable the Google-account half, register an iOS OAuth client (bundle ID
+`com.prism.client`) in Google Cloud Console and put the ID in `Secrets.swift`.
+The consent screen can stay in Testing mode — no verification needed. The
+YouTube session works without any of that.
+
 ## Status
 
 Working: home feed, search, watch with HLS playback, SponsorBlock skipping,
-Shorts, quality selection, background audio, settings.
+Shorts, comments, playlists, library (history, liked, Watch Later), chapters,
+quality selection, likes, background audio, both sign-ins.
 
-Not built yet: Google sign-in (subscriptions and likes need OAuth), chapters,
-comments, playlists.
+Not built: uploading, live chat, and the AI summary features — the last
+deliberately.
 
-Age-restricted and "made for kids" videos don't play — both require account
-cookies that no PO-token-free client provides.
+Age-restricted videos play once signed in with a YouTube session on an account
+old enough to watch them. "Made for kids" videos remain unreliable; the clients
+that return unsigned stream URLs refuse them, and the app says so rather than
+failing silently.
+
+## A note on formats
+
+YouTube is migrating its API from `*Renderer` objects to view-models, and the
+migration is uneven. Two surfaces have already moved, and both were verified
+against live responses rather than documentation:
+
+- **Comments** return zero `commentRenderer`s. Ordering lives in
+  `commentViewModel` entries; the data lives in
+  `frameworkUpdates.entityBatchUpdate` mutations, joined by `commentKey`.
+- **Playlists** return zero `playlistVideoRenderer`s and 100 `lockupViewModel`s.
+
+A parser written from the documented shape returns an empty list rather than
+erroring — it looks like "no comments" instead of "broken parser". The parsers
+here handle both formats and harvest renderers by key at any depth, so a moved
+path doesn't break them.
 
 ## Licence and intent
 

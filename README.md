@@ -14,6 +14,19 @@ scrubber**: every sponsor, intro and self-promotion in the video is drawn in
 place as a band of colour, so you can see what's ahead instead of discovering it
 by walking into it.
 
+<p align="center">
+  <img src="docs/shots/01-home.png" width="270" alt="Home feed">
+  <img src="docs/shots/03-scrubber.png" width="270" alt="Watch screen showing the spectrum scrubber">
+  <img src="docs/shots/06-settings.png" width="270" alt="Settings">
+</p>
+
+On the scrubber above: the played portion runs violet to cyan, then rose marks a
+sponsor, a violet tick a subscribe reminder, amber a self-promotion, and cyan the
+outro. The same colours label the segment list below the video, so the setting
+and its effect are visibly the same object.
+
+These are real captures from an iOS Simulator running the app in CI, not mockups.
+
 There are deliberately **no downloads**. Streaming is transient; a download is a
 copy, and that's the line this project doesn't cross.
 

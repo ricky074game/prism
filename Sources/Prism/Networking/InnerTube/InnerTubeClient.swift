@@ -196,9 +196,15 @@ actor InnerTubeClient {
         var playability = json["playabilityStatus"] as? [String: Any]
         var status = playability?["status"] as? String ?? "UNKNOWN"
 
-        // A stale visitorData reads as LOGIN_REQUIRED. Mint a fresh one and
-        // retry once before surfacing anything to the user.
-        if status == "LOGIN_REQUIRED" {
+        // A stale visitorData reads as LOGIN_REQUIRED — but so does an age gate,
+        // and those need opposite handling. Re-minting the token for an
+        // age-restricted video throws away a perfectly good session token and
+        // makes the *next* video pay for a fresh mint, so the reason is checked
+        // before assuming the token is at fault.
+        let reasonText = (playability?["reason"] as? String)?.lowercased() ?? ""
+        let isAgeGate = reasonText.contains("age") || reasonText.contains("confirm your age")
+
+        if status == "LOGIN_REQUIRED", !isAgeGate {
             await VisitorSession.shared.invalidate()
             json = try await post(
                 "player",

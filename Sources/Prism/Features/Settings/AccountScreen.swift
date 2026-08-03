@@ -14,7 +14,6 @@ import SwiftUI
 struct AccountScreen: View {
     @State private var session = AccountSession.shared
     @State private var auth = GoogleAuth.shared
-    @State private var showWebSignIn = false
     @State private var showSignOutConfirm = false
 
     var body: some View {
@@ -31,28 +30,9 @@ struct AccountScreen: View {
         .background(Palette.ink.ignoresSafeArea())
         .navigationTitle("Account")
         .navigationBarTitleDisplayMode(.inline)
-        .sheet(isPresented: $showWebSignIn) {
-            NavigationStack {
-                AccountSignInView { cookies in
-                    session.adopt(cookies)
-                    showWebSignIn = false
-                    Haptics.notify(.success)
-                }
-                .ignoresSafeArea(edges: .bottom)
-                .navigationTitle("Sign in to YouTube")
-                .navigationBarTitleDisplayMode(.inline)
-                .toolbar {
-                    ToolbarItem(placement: .topBarLeading) {
-                        Button("Cancel") { showWebSignIn = false }
-                            .font(Type.label)
-                            .foregroundStyle(Palette.textSecondary)
-                    }
-                }
-            }
-        }
         .confirmationDialog("Sign out of YouTube?", isPresented: $showSignOutConfirm, titleVisibility: .visible) {
             Button("Sign out", role: .destructive) {
-                Task { await session.signOut() }
+                session.signOut()
             }
         } message: {
             Text("Age-restricted videos, history and Watch Later will stop working.")
@@ -83,9 +63,11 @@ struct AccountScreen: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.vertical, Metrics.Space.md)
                 }
+            } else if let code = session.pendingCode {
+                deviceCodePanel(code)
             } else {
                 Button {
-                    showWebSignIn = true
+                    Task { await session.beginSignIn() }
                 } label: {
                     Text("Sign in to YouTube")
                         .font(Type.label)
@@ -95,6 +77,13 @@ struct AccountScreen: View {
                         .background(Palette.refractGradient, in: Capsule())
                 }
                 .padding(.vertical, Metrics.Space.sm)
+            }
+
+            if let error = session.error {
+                Text(error)
+                    .font(Type.labelSmall)
+                    .foregroundStyle(Palette.warning)
+                    .padding(.bottom, Metrics.Space.md)
             }
         }
     }
@@ -162,7 +151,7 @@ struct AccountScreen: View {
                 .foregroundStyle(Palette.warning)
 
             Text("""
-            Signing in stores your YouTube session on this device, the same way a browser does. Prism sends it only to youtube.com and never anywhere else.
+            You authorise Prism on google.com — your password is never typed into this app, and you can revoke access from your Google account page at any time, exactly like a television.
 
             Even so, using any third-party client with your account is against YouTube's Terms of Service, and accounts have been flagged for it. If that would cost you something, use a secondary account instead.
             """)
@@ -176,6 +165,70 @@ struct AccountScreen: View {
             RoundedRectangle(cornerRadius: Metrics.Radius.card, style: .continuous)
                 .strokeBorder(Palette.warning.opacity(0.18))
         )
+    }
+
+    /// The code the user types on google.com/device.
+    ///
+    /// The code itself is the hero of this panel — large, monospaced, and
+    /// letter-spaced, because it is read off one screen and typed into another.
+    /// Grouping is preserved exactly as Google issues it.
+    private func deviceCodePanel(_ code: AccountSession.DeviceCode) -> some View {
+        VStack(spacing: Metrics.Space.lg) {
+            VStack(spacing: Metrics.Space.sm) {
+                Text("1. Go to")
+                    .font(Type.labelSmall)
+                    .foregroundStyle(Palette.textTertiary)
+
+                Text(code.verificationURL.replacingOccurrences(of: "https://", with: ""))
+                    .font(Type.bodyEmphasis)
+                    .foregroundStyle(Palette.disperse)
+            }
+
+            VStack(spacing: Metrics.Space.sm) {
+                Text("2. Enter this code")
+                    .font(Type.labelSmall)
+                    .foregroundStyle(Palette.textTertiary)
+
+                Text(code.userCode)
+                    .font(.system(size: 30, weight: .bold, design: .monospaced))
+                    .tracking(3)
+                    .foregroundStyle(Palette.textPrimary)
+                    .textSelection(.enabled)
+                    .padding(.horizontal, Metrics.Space.lg)
+                    .padding(.vertical, Metrics.Space.md)
+                    .background(Palette.surfaceRaised, in: RoundedRectangle(cornerRadius: Metrics.Radius.md, style: .continuous))
+            }
+
+            HStack(spacing: Metrics.Space.md) {
+                Button {
+                    UIPasteboard.general.string = code.userCode
+                    Haptics.impact(.light)
+                } label: {
+                    Label("Copy code", systemImage: "doc.on.doc")
+                        .font(Type.labelSmall)
+                        .foregroundStyle(Palette.textPrimary)
+                }
+
+                Link(destination: URL(string: code.verificationURL)!) {
+                    Label("Open page", systemImage: "arrow.up.right.square")
+                        .font(Type.labelSmall)
+                        .foregroundStyle(Palette.refract)
+                }
+            }
+
+            HStack(spacing: Metrics.Space.sm) {
+                ProgressView().controlSize(.small).tint(Palette.textTertiary)
+                Text("Waiting for you to approve it…")
+                    .font(Type.labelSmall)
+                    .foregroundStyle(Palette.textTertiary)
+            }
+
+            Button("Cancel") { session.cancelSignIn() }
+                .font(Type.labelSmall)
+                .foregroundStyle(Palette.textTertiary)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, Metrics.Space.lg)
     }
 
     // MARK: Building blocks

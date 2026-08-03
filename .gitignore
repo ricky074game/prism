@@ -6,3 +6,5 @@ DerivedData/
 Payload/
 *.ipa
 .DS_Store
+
+.claude/

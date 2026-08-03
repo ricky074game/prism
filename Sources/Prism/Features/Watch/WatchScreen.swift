@@ -60,6 +60,9 @@ struct WatchScreen: View {
     @State private var model = WatchModel()
     @State private var glow = GlowSource()
     @State private var dragOffset: CGFloat = 0
+    @State private var isLiked = false
+    @State private var showDescription = false
+    @State private var showShare = false
 
     var body: some View {
         GeometryReader { geo in
@@ -174,15 +177,40 @@ struct WatchScreen: View {
     private var actionRow: some View {
         ScrollView(.horizontal) {
             HStack(spacing: Metrics.Space.sm) {
-                PillButton(icon: "hand.thumbsup", title: "Like")
-                PillButton(icon: "hand.thumbsdown", title: nil)
-                PillButton(icon: "bell", title: "Subscribe", prominent: true)
-                PillButton(icon: "square.and.arrow.up", title: "Share")
-                PillButton(icon: "text.alignleft", title: "Description")
+                PillButton(icon: isLiked ? "hand.thumbsup.fill" : "hand.thumbsup",
+                           title: "Like",
+                           tint: isLiked ? Palette.refract : nil) {
+                    isLiked.toggle()
+                    Haptics.impact(.medium)
+                    if GoogleAuth.shared.isSignedIn {
+                        Task {
+                            try? await YouTubeDataAPI.shared.rate(
+                                videoID: video.id,
+                                rating: isLiked ? "like" : "none"
+                            )
+                        }
+                    }
+                }
+                PillButton(icon: "hand.thumbsdown", title: nil) {}
+                PillButton(icon: "bell", title: "Subscribe", prominent: true) {}
+                PillButton(icon: "square.and.arrow.up", title: "Share") { showShare = true }
+                PillButton(icon: "text.alignleft", title: "Description") { showDescription = true }
             }
             .padding(.horizontal, 2)
         }
         .scrollIndicators(.hidden)
+        .sheet(isPresented: $showDescription) {
+            if let source = model.source {
+                DescriptionSheet(source: source) { player.seek(to: $0) }
+                    .presentationDetents([.medium, .large])
+            }
+        }
+        .sheet(isPresented: $showShare) {
+            if let url = URL(string: "https://youtu.be/\(video.id)") {
+                ShareLink(item: url) { Text("Share") }
+                    .presentationDetents([.medium])
+            }
+        }
     }
 
     private var upNext: some View {
@@ -222,14 +250,18 @@ struct PillButton: View {
     let icon: String
     var title: String?
     var prominent = false
+    var tint: Color?
+    var action: () -> Void = {}
 
     var body: some View {
-        Button {} label: {
+        Button(action: action) {
             HStack(spacing: 6) {
-                Image(systemName: icon).font(.system(size: 13, weight: .semibold))
+                Image(systemName: icon)
+                    .font(.system(size: 13, weight: .semibold))
+                    .contentTransition(.symbolEffect(.replace))
                 if let title { Text(title).font(Type.label) }
             }
-            .foregroundStyle(prominent ? Palette.ink : Palette.textPrimary)
+            .foregroundStyle(prominent ? Palette.ink : (tint ?? Palette.textPrimary))
             .padding(.horizontal, Metrics.Space.md)
             .padding(.vertical, Metrics.Space.sm + 1)
             .background {

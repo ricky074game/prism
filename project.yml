@@ -44,6 +44,23 @@ targets:
         INFOPLIST_KEY_UISupportedInterfaceOrientations: "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
         INFOPLIST_KEY_UIStatusBarStyle: UIStatusBarStyleLightContent
         TARGETED_DEVICE_FAMILY: "1,2"
+
+  PrismTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: Tests/PrismTests
+    dependencies:
+      - target: Prism
+    settings:
+      base:
+        # Tests run against the simulator and are never shipped, so signing is
+        # irrelevant here.
+        CODE_SIGNING_ALLOWED: "NO"
+        GENERATE_INFOPLIST_FILE: "YES"
+    scheme:
+      testTargets:
+        - PrismTests
     info:
       path: Sources/Prism/Info.plist
       properties:

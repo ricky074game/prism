@@ -1,0 +1,52 @@
+name: Test
+
+# Runs the unit tests on a simulator. These cover the pure logic — parsing,
+# stream selection, segment rules — the parts that break silently.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: test-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Unit tests
+    runs-on: macos-15
+    timeout-minutes: 25
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode.app
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate project
+        run: xcodegen generate --spec project.yml
+
+      - name: Run tests
+        run: |
+          set -o pipefail
+          # Pick whatever iPhone simulator this runner image actually has,
+          # rather than pinning a model that may not exist.
+          DEST=$(xcrun simctl list devices available --json | python3 -c "
+          import json,sys
+          d=json.load(sys.stdin)['devices']
+          for runtime, devices in sorted(d.items()):
+              for dev in devices:
+                  if 'iPhone' in dev['name']:
+                      print(dev['udid']); raise SystemExit
+          ")
+          echo "using simulator $DEST"
+          xcodebuild test \
+            -project Prism.xcodeproj \
+            -scheme Prism \
+            -destination "id=$DEST" \
+            CODE_SIGNING_ALLOWED=NO \
+            2>&1 | xcbeautify --renderer github-actions

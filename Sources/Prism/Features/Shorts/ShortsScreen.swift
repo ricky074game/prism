@@ -9,6 +9,11 @@ final class ShortsModel {
 
     func load() async {
         isLoading = true
+        if DemoData.isEnabled {
+            videos = DemoData.videos
+            isLoading = false
+            return
+        }
         if let page = try? await FeedRepository.shared.shorts() {
             videos = page.videos
         }
@@ -89,16 +94,23 @@ struct ShortCell: View {
 
     var body: some View {
         ZStack {
-            // The thumbnail sits underneath permanently: while the player is
-            // still buffering it stands in for the video, so a swipe never lands
-            // on a black rectangle.
-            RemoteImage(url: video.thumbnailURL, targetSize: CGSize(width: 720, height: 1280), contentMode: .fill) {
+            // A blurred copy fills the frame behind the video, so a 16:9 short
+            // shown full-height has something better than black in the letterbox
+            // bars. Only drawn once the video is up — before that the sharp
+            // thumbnail below carries the frame.
+            RemoteImage(url: video.thumbnailURL, targetSize: CGSize(width: 240, height: 135), contentMode: .fill) {
                 Color.black
             }
-            .blur(radius: 18)
-            .overlay(Color.black.opacity(0.35))
+            .blur(radius: 24)
+            .overlay(Color.black.opacity(0.4))
 
-            if let player {
+            // The thumbnail stands in for the video until the player is ready,
+            // so a swipe never lands on a black rectangle.
+            if player == nil {
+                RemoteImage(url: video.thumbnailURL, targetSize: CGSize(width: 720, height: 1280), contentMode: .fit) {
+                    Color.clear
+                }
+            } else if let player {
                 VideoSurface(player: player, gravity: .resizeAspectFill)
             }
 

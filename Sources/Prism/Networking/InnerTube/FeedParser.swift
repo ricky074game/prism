@@ -28,6 +28,12 @@ enum FeedParser {
         harvest(json, key: "gridVideoRenderer") { r in
             if let v = video(from: r), seen.insert(v.id).inserted { found.append(v) }
         }
+        // The current format. YouTube is migrating surfaces from the old
+        // *Renderer objects to view-models; playlists have already moved
+        // entirely, returning zero videoRenderers and 100 lockupViewModels.
+        harvest(json, key: "lockupViewModel") { r in
+            if let v = lockup(from: r), seen.insert(v.id).inserted { found.append(v) }
+        }
         // Home-feed items wrap a videoRenderer one level down.
         harvest(json, key: "richItemRenderer") { r in
             guard let inner = r["content"] as? [String: Any] else { return }
@@ -63,6 +69,62 @@ enum FeedParser {
                 .flatMap { $0["token"] as? String }
         }
         return token
+    }
+
+    // MARK: lockupViewModel → Video
+
+    /// The view-model format.
+    ///
+    /// Structurally unlike the renderers: the video id is `contentId`, and the
+    /// channel / views / age are an ordered list of metadata rows rather than
+    /// named fields. The rows are positional — channel first, then any of views
+    /// and age — so they're classified by shape rather than by index, which
+    /// survives a missing row.
+    private static func lockup(from r: [String: Any]) -> Video? {
+        guard let id = r["contentId"] as? String, !id.isEmpty else { return nil }
+        // The same view-model renders playlists and channels; only take videos.
+        guard (r["contentType"] as? String ?? "").contains("VIDEO") else { return nil }
+
+        let metadata = (r["metadata"] as? [String: Any])?["lockupMetadataViewModel"] as? [String: Any]
+        guard let title = (metadata?["title"] as? [String: Any])?["content"] as? String,
+              !title.isEmpty
+        else { return nil }
+
+        var channel = "", views = "", age = ""
+        if let rows = ((metadata?["metadata"] as? [String: Any])?["contentMetadataViewModel"] as? [String: Any])?["metadataRows"] as? [[String: Any]] {
+            let parts = rows.flatMap { ($0["metadataParts"] as? [[String: Any]]) ?? [] }
+                .compactMap { ($0["text"] as? [String: Any])?["content"] as? String }
+            for part in parts {
+                if part.contains("views") { views = part }
+                else if part.contains("ago") { age = part }
+                else if channel.isEmpty { channel = part }
+            }
+        }
+
+        return Video(
+            id: id,
+            title: title,
+            channelName: channel,
+            channelID: "",
+            channelThumbnailURL: nil,
+            thumbnailURL: Video.thumbnail(id),
+            duration: lockupDuration(r),
+            viewCountText: views,
+            publishedText: age,
+            isLive: false,
+            isShort: false
+        )
+    }
+
+    /// Duration lives in a thumbnail overlay badge rather than alongside the
+    /// other metadata.
+    private static func lockupDuration(_ r: [String: Any]) -> Double {
+        var text: String?
+        harvest(r, key: "thumbnailBadgeViewModel") { badge in
+            guard text == nil, let t = badge["text"] as? String, t.contains(":") else { return }
+            text = t
+        }
+        return parseDuration(text ?? "")
     }
 
     // MARK: Renderer → Video

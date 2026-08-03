@@ -146,6 +146,15 @@ actor InnerTubeClient {
         if let visitorData {
             req.setValue(visitorData, forHTTPHeaderField: "X-Goog-Visitor-Id")
         }
+
+        // Sign as the user when they've signed in. This is what lifts the age
+        // gate and makes history, Watch Later and a personalised home feed
+        // return the user's own data instead of empty or generic results.
+        for (field, value) in await AccountSession.shared.authHeaders() {
+            req.setValue(value, forHTTPHeaderField: field)
+        }
+        req.httpShouldHandleCookies = true
+
         req.httpBody = try JSONSerialization.data(withJSONObject: payload)
 
         let (data, response) = try await session.data(for: req)
@@ -218,9 +227,19 @@ actor InnerTubeClient {
         guard status == "OK" else {
             // Surface YouTube's own wording — it is usually more accurate about
             // *why* than anything we could invent (age gate, region, private).
-            let reason = (playability?["reason"] as? String)
+            var reason = (playability?["reason"] as? String)
                 ?? (playability?["messages"] as? [String])?.first
                 ?? "This video can't be played."
+
+            // An age gate is the one failure the user can actually do something
+            // about, so say what that is rather than repeating YouTube's
+            // instruction to sign in on a screen that has no sign-in button.
+            if isAgeGate {
+                reason = await AccountSession.shared.isSignedIn
+                    ? "This video is age-restricted, and your account isn't old enough to watch it."
+                    : "This video is age-restricted. Sign in to your account in Settings to watch it."
+            }
+
             throw InnerTubeError.unplayable(reason: reason)
         }
 

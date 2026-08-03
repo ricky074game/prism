@@ -182,34 +182,6 @@ struct SignInPrompt: View {
     }
 }
 
-struct LibraryScreen: View {
-    @Environment(Router.self) private var router
-    @State private var trending: [Video] = []
-
-    var body: some View {
-        ScrollView {
-            LazyVStack(spacing: Metrics.Space.xl) {
-                ForEach(trending) { video in
-                    VideoCard(video: video) { router.open(video) }
-                        .padding(.horizontal, Metrics.gutter)
-                }
-                Color.clear.frame(height: TabBar.height + Metrics.Space.xxl)
-            }
-            .padding(.top, Metrics.Space.sm)
-        }
-        .scrollIndicators(.hidden)
-        .background(Palette.ink)
-        .safeAreaInset(edge: .top, spacing: 0) { ScreenHeader(title: "Trending") }
-        .task {
-            if DemoData.isEnabled {
-                trending = DemoData.videos.reversed()
-            } else if let page = try? await FeedRepository.shared.feed(.trending) {
-                trending = page.videos
-            }
-        }
-    }
-}
-
 struct ScreenHeader: View {
     let title: String
 

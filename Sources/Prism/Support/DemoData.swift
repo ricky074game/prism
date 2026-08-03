@@ -54,6 +54,15 @@ enum DemoData {
                        actionType: "skip", locked: true, votes: 61),
     ]
 
+    static let playlists: [Playlist] = [
+        Playlist(id: "PL1", title: "Things that explain themselves", author: "You",
+                 thumbnailURL: nil, videoCountText: "42 videos"),
+        Playlist(id: "PL2", title: "Watch on the good speakers", author: "You",
+                 thumbnailURL: nil, videoCountText: "18 videos"),
+        Playlist(id: "PL3", title: "Long-form, no rush", author: "You",
+                 thumbnailURL: nil, videoCountText: "7 videos"),
+    ]
+
     static let comments: [Comment] = [
         Comment(
             id: "c1",

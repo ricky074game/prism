@@ -4,6 +4,11 @@ struct RootView: View {
     @Environment(Router.self) private var router
     @Environment(Settings.self) private var settings
 
+    /// Screenshot runs open Search and Settings directly, since both are
+    /// presented modally and can't be reached by setting a tab.
+    @State private var showSearchForScreenshot = DemoData.screen == "search"
+    @State private var showSettingsForScreenshot = DemoData.screen == "settings"
+
     var body: some View {
         @Bindable var router = router
 
@@ -33,6 +38,11 @@ struct RootView: View {
         }
         .motion(Motion.hero, value: router.isWatchExpanded)
         .motion(Motion.standard, value: router.nowPlaying?.id)
+        .task { router.applyLaunchScreen() }
+        .fullScreenCover(isPresented: $showSearchForScreenshot) { SearchScreen() }
+        .sheet(isPresented: $showSettingsForScreenshot) {
+            NavigationStack { SettingsScreen() }
+        }
     }
 
     private var visibleTabs: [Router.Tab] {

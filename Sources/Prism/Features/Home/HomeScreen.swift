@@ -10,6 +10,12 @@ final class HomeModel {
     private var isPaging = false
 
     func load(refresh: Bool = false) async {
+        if DemoData.isEnabled {
+            videos = DemoData.videos
+            isLoading = false
+            return
+        }
+
         guard !isLoading else { return }
         isLoading = videos.isEmpty
         error = nil

@@ -11,6 +11,12 @@ final class SearchModel {
     /// Debounced so typing doesn't fire a request per keystroke.
     func search(_ text: String) {
         task?.cancel()
+
+        if DemoData.isEnabled {
+            results = DemoData.videos
+            return
+        }
+
         guard text.count >= 2 else {
             results = []
             isSearching = false
@@ -66,7 +72,14 @@ struct SearchScreen: View {
             .background(Palette.ink.ignoresSafeArea())
             .toolbar(.hidden, for: .navigationBar)
         }
-        .onAppear { focused = true }
+        .onAppear {
+            if DemoData.isEnabled {
+                model.query = "swift programming"
+                model.search(model.query)
+            } else {
+                focused = true
+            }
+        }
     }
 
     private var searchField: some View {

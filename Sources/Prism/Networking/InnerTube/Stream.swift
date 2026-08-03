@@ -80,6 +80,13 @@ struct PlaybackSource: Sendable {
     let viewCount: Int
     let streams: [Stream]
 
+    /// The preferred playback route when present.
+    ///
+    /// The manifest interleaves H.264 and VP9 variants; AVPlayer ignores the
+    /// codecs it can't decode and adapts across the rest on its own, so it can
+    /// be handed straight to an `AVPlayerItem` with nothing else to arrange.
+    let hlsManifestURL: URL?
+
     var playable: [Stream] { streams.filter(\.isPlayableByAVFoundation) }
 
     /// Distinct video qualities on offer, best first — what the quality menu shows.

@@ -21,7 +21,30 @@ struct InnerTubeClientProfile: Sendable {
     let userAgent: String
     let extraContext: [String: Any]
 
-    /// Primary. Verified to return adaptive formats up to 2160p without a PO Token.
+    /// Primary.
+    ///
+    /// The visionOS client is the one client that still returns a real
+    /// `hlsManifestUrl` — verified across multiple videos — and it needs no PO
+    /// Token, no API key, and no JavaScript signature solving. That manifest is
+    /// worth a great deal: it carries a full H.264 ladder from 144p to 1080p,
+    /// so AVPlayer gets adaptive bitrate, subtitles, AirPlay and Picture in
+    /// Picture for free from a single URL.
+    static let visionOS = InnerTubeClientProfile(
+        name: "VISIONOS",
+        version: "1.02",
+        userAgent: "com.google.ios.youtube/1.02 (RealityDevice17,1; U; CPU visionOS 26_5 like Mac OS X)",
+        extraContext: [
+            "deviceMake": "Apple",
+            "deviceModel": "RealityDevice17,1",
+            "osName": "visionOS",
+            "osVersion": "26.5.23O471",
+        ]
+    )
+
+    /// Fallback, and the only route to >1080p.
+    ///
+    /// Returns adaptive formats (including 1440p/2160p AV1) but no HLS
+    /// manifest, so using it means compositing separate audio and video.
     static let androidVR = InnerTubeClientProfile(
         name: "ANDROID_VR",
         version: "1.62.27",
@@ -99,14 +122,30 @@ actor InnerTubeClient {
         body: [String: Any],
         profile: InnerTubeClientProfile
     ) async throws -> [String: Any] {
-        var payload = body
-        payload["context"] = profile.context(hl: locale.hl, gl: locale.gl)
+        // Every request carries visitorData, in the context *and* the header.
+        // Omitting it is what produces spurious LOGIN_REQUIRED failures.
+        let visitorData = await VisitorSession.shared.token()
 
-        var req = URLRequest(url: base.appendingPathComponent(endpoint))
+        var payload = body
+        var context = profile.context(hl: locale.hl, gl: locale.gl)
+        if let visitorData, var client = context["client"] as? [String: Any] {
+            client["visitorData"] = visitorData
+            context["client"] = client
+        }
+        payload["context"] = context
+
+        var url = base.appendingPathComponent(endpoint)
+        // No API key: it is no longer validated, and sending one adds nothing.
+        url.append(queryItems: [URLQueryItem(name: "prettyPrint", value: "false")])
+
+        var req = URLRequest(url: url)
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         req.setValue(profile.userAgent, forHTTPHeaderField: "User-Agent")
         req.setValue("https://www.youtube.com", forHTTPHeaderField: "Origin")
+        if let visitorData {
+            req.setValue(visitorData, forHTTPHeaderField: "X-Goog-Visitor-Id")
+        }
         req.httpBody = try JSONSerialization.data(withJSONObject: payload)
 
         let (data, response) = try await session.data(for: req)
@@ -124,21 +163,51 @@ actor InnerTubeClient {
 
     // MARK: Playback
 
-    /// Resolves everything needed to play a video: stream sets, duration, and
-    /// the metadata shown around the player.
+    /// Resolves everything needed to play a video.
+    ///
+    /// Tries visionOS first for its HLS manifest, and falls back to the
+    /// Android VR client's adaptive formats if that comes back without one.
+    /// A video that fails on both is genuinely unplayable (age-gated,
+    /// members-only, region-locked), not a transport problem.
     func player(videoID: String) async throws -> PlaybackSource {
-        let json = try await post(
+        do {
+            let source = try await resolve(videoID: videoID, profile: .visionOS)
+            if source.hlsManifestURL != nil || !source.streams.isEmpty { return source }
+        } catch let error as InnerTubeError {
+            // An explicit "you can't watch this" is final — don't retry it
+            // against another client and produce a confusing second failure.
+            if case .unplayable = error { throw error }
+        }
+
+        return try await resolve(videoID: videoID, profile: .androidVR)
+    }
+
+    private func resolve(videoID: String, profile: InnerTubeClientProfile) async throws -> PlaybackSource {
+        var json = try await post(
             "player",
             body: [
                 "videoId": videoID,
                 "contentCheckOk": true,
                 "racyCheckOk": true,
             ],
-            profile: .androidVR
+            profile: profile
         )
 
-        let playability = json["playabilityStatus"] as? [String: Any]
-        let status = playability?["status"] as? String ?? "UNKNOWN"
+        var playability = json["playabilityStatus"] as? [String: Any]
+        var status = playability?["status"] as? String ?? "UNKNOWN"
+
+        // A stale visitorData reads as LOGIN_REQUIRED. Mint a fresh one and
+        // retry once before surfacing anything to the user.
+        if status == "LOGIN_REQUIRED" {
+            await VisitorSession.shared.invalidate()
+            json = try await post(
+                "player",
+                body: ["videoId": videoID, "contentCheckOk": true, "racyCheckOk": true],
+                profile: profile
+            )
+            playability = json["playabilityStatus"] as? [String: Any]
+            status = playability?["status"] as? String ?? "UNKNOWN"
+        }
 
         guard status == "OK" else {
             // Surface YouTube's own wording — it is usually more accurate about
@@ -156,7 +225,9 @@ actor InnerTubeClient {
         let details = json["videoDetails"] as? [String: Any] ?? [:]
 
         let streams = (adaptive + progressive).compactMap(Stream.init(json:))
-        guard !streams.isEmpty else { throw InnerTubeError.noFormats }
+        let hls = (streaming["hlsManifestUrl"] as? String).flatMap(URL.init(string:))
+
+        guard hls != nil || !streams.isEmpty else { throw InnerTubeError.noFormats }
 
         return PlaybackSource(
             videoID: videoID,
@@ -166,7 +237,8 @@ actor InnerTubeClient {
             duration: Double(details["lengthSeconds"] as? String ?? "") ?? 0,
             isLive: details["isLiveContent"] as? Bool ?? false,
             viewCount: Int(details["viewCount"] as? String ?? "") ?? 0,
-            streams: streams
+            streams: streams,
+            hlsManifestURL: hls
         )
     }
 

@@ -68,6 +68,20 @@ final class Router {
         isWatchExpanded = true
     }
 
+    /// Puts the app on a given screen at launch, for screenshot runs.
+    func applyLaunchScreen() {
+        guard let screen = DemoData.screen else { return }
+        switch screen {
+        case "shorts": tab = .shorts
+        case "subscriptions": tab = .subscriptions
+        case "library": tab = .library
+        case "watch", "scrubber":
+            tab = .home
+            if let first = DemoData.videos.first { open(first) }
+        default: tab = .home
+        }
+    }
+
     func closeWatch() {
         isWatchExpanded = false
         nowPlaying = nil

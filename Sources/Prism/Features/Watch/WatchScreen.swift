@@ -13,6 +13,20 @@ final class WatchModel {
         isLoading = true
         error = nil
 
+        if DemoData.isEnabled {
+            // Fixture segments give the scrubber real dispersion to draw
+            // without depending on the network.
+            player.categoryActions = settings.categoryActions
+            player.poseForDemo(
+                duration: video.duration > 0 ? video.duration : 596,
+                at: 132,
+                segments: DemoData.segments
+            )
+            related = Array(DemoData.videos.dropFirst())
+            isLoading = false
+            return
+        }
+
         // Segments and related videos are fetched alongside playback rather than
         // before it — neither should delay the first frame.
         async let segmentsTask = SponsorBlockService.shared.segments(

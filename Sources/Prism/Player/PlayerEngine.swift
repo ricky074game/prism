@@ -78,12 +78,60 @@ final class PlayerEngine {
 
     // MARK: Loading
 
+    /// Poses the engine mid-playback without a real item, so screenshot runs
+    /// can show the scrubber with segments, a playhead and a buffer.
+    func poseForDemo(duration: Double, at time: Double, segments: [SponsorSegment]) {
+        self.duration = duration
+        self.currentTime = time
+        self.bufferedTime = min(duration, time + duration * 0.28)
+        self.segments = segments
+        self.isPlaying = true
+        self.isBuffering = false
+    }
+
     func load(source: PlaybackSource, quality: VideoQuality = .auto, startAt: Double = 0) async {
         self.source = source
         self.duration = source.duration
         self.currentQuality = quality
         self.error = nil
         upgradeTask?.cancel()
+
+        // Best path: one HLS manifest. AVPlayer handles bitrate adaptation,
+        // codec selection, subtitles and PiP itself, so there is nothing to
+        // compose and only one round-trip before the first frame.
+        //
+        // Quality is still honoured — an explicit choice sets a bitrate ceiling
+        // on the item rather than swapping to a different URL.
+        if quality == .auto, let hls = source.hlsManifestURL {
+            let item = AVPlayerItem(url: hls)
+            item.preferredForwardBufferDuration = 8
+            observeItem(item)
+            player.replaceCurrentItem(with: item)
+            if startAt > 0 {
+                player.seek(to: CMTime(seconds: startAt, preferredTimescale: 600),
+                            toleranceBefore: .zero, toleranceAfter: .zero)
+            }
+            player.play()
+            isPlaying = true
+            return
+        }
+
+        if let hls = source.hlsManifestURL, quality != .auto {
+            let item = AVPlayerItem(url: hls)
+            item.preferredForwardBufferDuration = 8
+            // Cap the ladder rather than pin it: if the network can't sustain
+            // the chosen tier, dropping below it beats stalling.
+            item.preferredPeakBitRate = Self.bitrateCeiling(for: quality)
+            observeItem(item)
+            player.replaceCurrentItem(with: item)
+            if startAt > 0 {
+                player.seek(to: CMTime(seconds: startAt, preferredTimescale: 600),
+                            toleranceBefore: .zero, toleranceAfter: .zero)
+            }
+            player.play()
+            isPlaying = true
+            return
+        }
 
         let selection = StreamSelector.select(from: source, quality: quality)
 
@@ -125,6 +173,20 @@ final class PlayerEngine {
     private static let assetOptions: [String: Any] = [
         AVURLAssetPreferPreciseDurationAndTimingKey: false
     ]
+
+    /// Peak bitrate for each quality tier, sized a little above YouTube's own
+    /// H.264 ladder so the intended rung is always reachable.
+    private static func bitrateCeiling(for quality: VideoQuality) -> Double {
+        switch quality {
+        case .auto, .p2160: 0          // 0 means "no cap"
+        case .p1440: 12_000_000
+        case .p1080: 6_000_000
+        case .p720: 3_000_000
+        case .p480: 1_500_000
+        case .p360: 800_000
+        case .p240: 400_000
+        }
+    }
 
     /// Stitches separate video and audio renditions into one playable asset.
     nonisolated private static func compose(video: Stream, audio: Stream) async throws -> AVMutableComposition {

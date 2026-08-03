@@ -1,0 +1,116 @@
+name: Screenshots
+
+# Boots a real iOS Simulator, runs the app, and captures PNGs.
+# This is how the app gets reviewed at all — the author is on Linux and has no
+# simulator locally.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      demo:
+        description: "Use bundled fixture data instead of live YouTube"
+        type: boolean
+        default: true
+
+concurrency:
+  group: shots-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  screenshots:
+    name: Capture simulator screenshots
+    runs-on: macos-15
+    timeout-minutes: 35
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode.app
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate project
+        run: xcodegen generate --spec project.yml
+
+      - name: Build for simulator
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -project Prism.xcodeproj \
+            -scheme Prism \
+            -configuration Debug \
+            -sdk iphonesimulator \
+            -derivedDataPath build \
+            -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO \
+            build 2>&1 | xcbeautify --renderer github-actions
+
+      - name: Boot simulator
+        id: sim
+        run: |
+          # Pick a concrete device rather than relying on `booted`, which only
+          # resolves when exactly one simulator is running.
+          RUNTIME=$(xcrun simctl list runtimes --json | python3 -c "
+          import json,sys
+          rs=[r for r in json.load(sys.stdin)['runtimes'] if r['isAvailable'] and 'iOS' in r['name']]
+          print(sorted(rs, key=lambda r: r['version'])[-1]['identifier'])
+          ")
+          echo "runtime=$RUNTIME"
+          UDID=$(xcrun simctl create prism-shots "iPhone 16 Pro" "$RUNTIME")
+          echo "udid=$UDID" >> "$GITHUB_OUTPUT"
+          xcrun simctl boot "$UDID"
+          xcrun simctl bootstatus "$UDID" -b
+          # Dark status bar values so the captures look deliberate.
+          xcrun simctl status_bar "$UDID" override \
+            --time "9:41" --batteryState charged --batteryLevel 100 \
+            --cellularMode active --cellularBars 4 --wifiMode active --wifiBars 3
+
+      - name: Install app
+        run: |
+          APP=$(find build/Build/Products -name "Prism.app" -maxdepth 3 | head -1)
+          echo "installing $APP"
+          xcrun simctl install "${{ steps.sim.outputs.udid }}" "$APP"
+
+      - name: Capture screens
+        run: |
+          UDID="${{ steps.sim.outputs.udid }}"
+          BUNDLE="com.prism.client"
+          mkdir -p shots
+
+          shoot () {
+            local screen="$1"; local name="$2"; local wait="${3:-6}"
+            echo "--- $name"
+            xcrun simctl terminate "$UDID" "$BUNDLE" 2>/dev/null || true
+            sleep 1
+            # Launch arguments put the app straight onto the target screen with
+            # fixture data, so each capture is one deterministic launch.
+            xcrun simctl launch "$UDID" "$BUNDLE" -prism-demo -prism-screen "$screen" || true
+            sleep "$wait"
+            xcrun simctl io "$UDID" screenshot --type=png "shots/$name.png" || true
+          }
+
+          shoot home        01-home        8
+          shoot watch       02-watch       10
+          shoot scrubber    03-scrubber    10
+          shoot shorts      04-shorts      8
+          shoot search      05-search      6
+          shoot settings    06-settings    6
+
+          echo "--- captured ---"
+          ls -la shots/
+
+      - name: Upload screenshots
+        uses: actions/upload-artifact@v4
+        with:
+          name: screenshots
+          path: shots/
+          retention-days: 30
+
+      - name: Tear down
+        if: always()
+        run: |
+          xcrun simctl shutdown "${{ steps.sim.outputs.udid }}" || true
+          xcrun simctl delete "${{ steps.sim.outputs.udid }}" || true

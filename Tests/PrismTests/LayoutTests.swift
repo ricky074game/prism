@@ -19,7 +19,7 @@ final class LayoutTests: XCTestCase {
     private let slideOver = PrismLayout(width: 320, height: 1180)
     private let splitHalf = PrismLayout(width: 507, height: 1024)
 
-    // MARK: Which chrome
+    // MARK: Which navigation
 
     func testPhoneKeepsTheBottomBar() {
         XCTAssertFalse(iPhone.isWide)
@@ -138,12 +138,12 @@ final class LayoutTests: XCTestCase {
         XCTAssertLessThan(heroHeight, wide.height * 0.6)
     }
 
-    // MARK: Chrome insets
+    // MARK: Bottom insets
 
-    func testScrollViewsClearWhicheverChromeIsShowing() {
+    func testScrollViewsClearWhicheverBarIsShowing() {
         // A phone has a bar to clear.
-        XCTAssertGreaterThan(iPhone.bottomChrome, TabBar.height)
+        XCTAssertGreaterThan(iPhone.bottomInset, TabBar.height)
         // An iPad doesn't, and padding for one would leave a dead strip.
-        XCTAssertLessThan(iPadLandscape.bottomChrome, TabBar.height)
+        XCTAssertLessThan(iPadLandscape.bottomInset, TabBar.height)
     }
 }

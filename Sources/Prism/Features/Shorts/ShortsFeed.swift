@@ -167,6 +167,13 @@ struct ShortsFeed: View {
         .rotationEffect(.degrees(90), anchor: .topLeading)
         .offset(x: size.width)
         .tabViewStyle(.page(indexDisplayMode: .never))
+        // The rotation is defined about the pager's top-left corner, so the
+        // pager has to actually *be* at the top-left. Its layout frame is
+        // landscape inside a portrait screen, and the enclosing stack centres
+        // it — displacing every short by half the difference between the two,
+        // which is the black band across the top of the feed. Alignment here
+        // puts the origin where the rotation already assumes it is.
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 
     private func closeButton(_ action: @escaping () -> Void) -> some View {

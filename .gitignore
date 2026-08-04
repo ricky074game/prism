@@ -8,3 +8,6 @@ Payload/
 .DS_Store
 
 .claude/
+
+# Stray debug captures
+*.html

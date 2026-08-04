@@ -25,7 +25,15 @@ sponsor, a violet tick a subscribe reminder, amber a self-promotion, and cyan th
 outro. The same colours label the segment list below the video, so the setting
 and its effect are visibly the same object.
 
-These are real captures from an iOS Simulator running the app in CI, not mockups.
+Universal, and not by stretching — the same build on an iPad Pro:
+
+<p align="center">
+  <img src="docs/shots/ipad/01-home.png" width="420" alt="Home feed on iPad, showing the side rail and a two-column grid">
+  <img src="docs/shots/ipad/08-channel-shorts.png" width="420" alt="A channel's Shorts grid on iPad">
+</p>
+
+These are real captures from iOS Simulators running the app in CI, not mockups —
+an iPhone 16 Pro and an iPad Pro 13", both through `scripts/capture.sh`.
 
 There are deliberately **no downloads**. Streaming is transient; a download is a
 copy, and that's the line this project doesn't cross.

@@ -14,10 +14,17 @@ import Observation
 /// cookie auth; only the WEB-family clients do, and those now need a BotGuard
 /// PO token, JavaScript signature solving, and give up the HLS manifest.
 ///
-/// The same clients *do* validate `Authorization: Bearer`. A deliberately bogus
-/// token produces a hard 401 naming OAuth explicitly. So the working path is the
-/// **device-code flow that YouTube's TV app uses** — the one where a television
-/// shows you a short code to type on your phone.
+/// What the playback path does accept is `Authorization: Bearer`, from a
+/// **first-party YouTube OAuth client**. That is enforced per client on Google's
+/// authorization server rather than by scope: the TV client is allowed to
+/// request the legacy `http://gdata.youtube.com` scope, and asking it for
+/// `youtube.readonly` instead returns `restricted_client`. A Cloud project you
+/// register yourself gets the mirror image — the ordinary YouTube scopes, never
+/// the legacy one.
+///
+/// Both first-party clients are registered as limited-input devices and reject
+/// every redirect URI, so the **device-code flow** isn't a preference here, it
+/// is the only grant type they support.
 ///
 /// That buys a lot:
 /// - Keeps `VISIONOS` and its HLS manifest, so playback is unchanged.

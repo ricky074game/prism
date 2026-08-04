@@ -133,10 +133,30 @@ it. The headset and mobile clients don't support cookie auth at all — only the
 WEB-family clients do, and those now require a BotGuard PO token and JavaScript
 signature solving, and give up the HLS manifest that makes playback simple.
 
-The same clients *do* validate `Authorization: Bearer` — a bogus token produces
-a hard 401 naming OAuth explicitly. So Prism uses the flow a television uses: it
-shows a short code, you type it at **google.com/device**, and the app polls until
-you approve.
+What InnerTube does accept on that path is `Authorization: Bearer`, and the
+tokens have to come from a **first-party YouTube OAuth client**. That is a
+per-client restriction on Google's authorization server, not a scope you can
+simply ask for:
+
+```
+TV client + http://gdata.youtube.com          → code issued
+TV client + .../auth/youtube                  → code issued
+TV client + .../auth/youtube.readonly         → restricted_client
+```
+
+`restricted_client` is Google refusing a scope *for that client*. A Cloud
+project you register yourself gets the mirror image: the ordinary YouTube scopes,
+never the legacy `gdata` one the playback path wants. Both known first-party
+clients (YouTube TV and YouTube VR) are registered as limited-input devices and
+reject every redirect URI — custom scheme, loopback and `oob` all return
+`Error 400: invalid_request`.
+
+So the device flow isn't a preference, it's the only grant those clients support.
+youtubei.js reached the same place: it shipped a custom-OAuth-client example
+until June 2025, then deleted it with the note that OAuth2 sign-in only works
+with the TV client. SmartTube and Kodi both carry first-party TV credentials
+*alongside* a self-registered client, and use the latter only for the Data API —
+never for playback.
 
 That keeps `VISIONOS` and its HLS manifest, needs no web view, no cookie jar, no
 PO token and no JavaScript — and your password is never typed into this app.

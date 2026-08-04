@@ -105,7 +105,7 @@ struct ShortsFeed: View {
                         )
                     }
                 } else {
-                    pager(in: geo.size, bottomInset: overlayInset(geo.safeAreaInsets.bottom))
+                    pager(in: geo.size, bottomInset: overlayInset)
                 }
 
                 if let onClose {
@@ -140,12 +140,20 @@ struct ShortsFeed: View {
     /// How much room the overlay has to leave at the bottom.
     ///
     /// The feed ignores the safe area so the video can run to the edges, which
-    /// means nothing else puts the home indicator back — the title was running
-    /// underneath it and the tab bar. Presented over a channel there's no tab
-    /// bar to clear, and on iPad there isn't one anywhere.
-    private func overlayInset(_ safeBottom: CGFloat) -> CGFloat {
+    /// means nothing else puts the home indicator back. The inset comes from
+    /// `WindowInsets` rather than from this view's `GeometryProxy`, which
+    /// reports zero for a safe area the view has just finished ignoring —
+    /// that's 34pt of clearance the title didn't get, and it sat behind the
+    /// home indicator.
+    ///
+    /// Presented over a channel there's no tab bar to clear, and on iPad there
+    /// isn't one anywhere.
+    /// Main-actor isolated because `UIApplication.shared` is. `body` already is,
+    /// so this is only making the requirement explicit rather than adding one.
+    @MainActor
+    private var overlayInset: CGFloat {
         let bar = (onClose == nil && !layout.isWide) ? TabBar.height : 0
-        return bar + safeBottom + Metrics.Space.lg
+        return bar + WindowInsets.bottom + Metrics.Space.lg
     }
 
     private func pager(in size: CGSize, bottomInset: CGFloat) -> some View {

@@ -89,9 +89,9 @@ struct PrismLayout: Equatable {
         return min(400, max(300, width * 0.28))
     }
 
-    /// Bottom padding scroll views need to clear the chrome. With a side rail
-    /// there is no bottom bar to clear.
-    var bottomChrome: CGFloat {
+    /// Bottom padding a scroll view needs so its last row clears the tab bar.
+    /// With a side rail there is no bottom bar to clear.
+    var bottomInset: CGFloat {
         isWide ? Metrics.Space.xxl : TabBar.height + Metrics.Space.xxl
     }
 }

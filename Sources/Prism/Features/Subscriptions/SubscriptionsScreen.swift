@@ -74,7 +74,7 @@ struct SubscriptionsScreen: View {
                     }
                 }
 
-                Color.clear.frame(height: layout.bottomChrome)
+                Color.clear.frame(height: layout.bottomInset)
             }
             .padding(.top, Metrics.Space.sm)
             .pageWidth(layout)

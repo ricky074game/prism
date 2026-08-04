@@ -69,7 +69,7 @@ struct LibraryScreen: View {
 
                 shelf("Discover", model.trending, icon: "sparkles")
 
-                Color.clear.frame(height: layout.bottomChrome)
+                Color.clear.frame(height: layout.bottomInset)
             }
             .padding(.top, Metrics.Space.sm)
             .pageWidth(layout)

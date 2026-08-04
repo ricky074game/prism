@@ -3,8 +3,8 @@ import SwiftUI
 /// PRISM's colour system.
 ///
 /// The app is built on a cool ink base so that video content — the only truly
-/// colourful thing on screen — always reads as the brightest object. Chrome
-/// recedes; content advances.
+/// colourful thing on screen — always reads as the brightest object. Bars and
+/// controls recede; content advances.
 ///
 /// The accent pair (`refract` → `disperse`) is the refraction gradient: the
 /// violet and cyan that a prism throws at opposite ends of its spectrum. It is

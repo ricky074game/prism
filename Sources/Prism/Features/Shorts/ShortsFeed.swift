@@ -105,7 +105,7 @@ struct ShortsFeed: View {
                         )
                     }
                 } else {
-                    pager(in: geo.size, chrome: chromeInset(geo.safeAreaInsets.bottom))
+                    pager(in: geo.size, bottomInset: overlayInset(geo.safeAreaInsets.bottom))
                 }
 
                 if let onClose {
@@ -143,12 +143,12 @@ struct ShortsFeed: View {
     /// means nothing else puts the home indicator back — the title was running
     /// underneath it and the tab bar. Presented over a channel there's no tab
     /// bar to clear, and on iPad there isn't one anywhere.
-    private func chromeInset(_ safeBottom: CGFloat) -> CGFloat {
+    private func overlayInset(_ safeBottom: CGFloat) -> CGFloat {
         let bar = (onClose == nil && !layout.isWide) ? TabBar.height : 0
         return bar + safeBottom + Metrics.Space.lg
     }
 
-    private func pager(in size: CGSize, chrome: CGFloat) -> some View {
+    private func pager(in size: CGSize, bottomInset: CGFloat) -> some View {
         TabView(selection: $index) {
             ForEach(Array(model.videos.enumerated()), id: \.element.id) { i, video in
                 ShortCell(
@@ -161,7 +161,7 @@ struct ShortsFeed: View {
                     contentWidth: layout.isWide
                         ? min(size.width, size.height * 9 / 16)
                         : size.width,
-                    chrome: chrome
+                    bottomInset: bottomInset
                 )
                 .frame(width: size.width, height: size.height)
                 .rotationEffect(.degrees(-90))
@@ -220,8 +220,9 @@ struct ShortCell: View {
     let isCurrent: Bool
     /// The width the video itself occupies. Narrower than the cell on iPad.
     var contentWidth: CGFloat?
-    /// Room to leave at the bottom for chrome the feed draws underneath.
-    var chrome: CGFloat = 0
+    /// Room to leave at the bottom for the tab bar and home indicator, which
+    /// the feed deliberately draws underneath.
+    var bottomInset: CGFloat = 0
 
     @State private var isLiked = false
 
@@ -301,7 +302,7 @@ struct ShortCell: View {
                 }
             }
             .padding(.horizontal, Metrics.gutter)
-            .padding(.bottom, chrome)
+            .padding(.bottom, bottomInset)
         }
         .background {
             LinearGradient(colors: [.clear, .black.opacity(0.55)],

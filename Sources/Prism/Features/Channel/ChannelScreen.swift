@@ -120,7 +120,7 @@ struct ChannelScreen: View {
                     tabStrip
                 }
             }
-            .padding(.bottom, layout.bottomChrome)
+            .padding(.bottom, layout.bottomInset)
             .pageWidth(layout)
         }
         .scrollIndicators(.hidden)

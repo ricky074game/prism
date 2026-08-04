@@ -47,7 +47,7 @@ struct RootView: View {
         }
     }
 
-    // MARK: Chrome
+    // MARK: Navigation
 
     private func barLayout(router tab: Binding<Router.Tab>) -> some View {
         ZStack(alignment: .bottom) {

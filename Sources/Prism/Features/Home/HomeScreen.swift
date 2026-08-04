@@ -67,7 +67,7 @@ struct HomeScreen: View {
                 if model.isLoading { loadingState }
                 if let error = model.error, model.videos.isEmpty { errorState(error) }
 
-                Color.clear.frame(height: layout.bottomChrome)
+                Color.clear.frame(height: layout.bottomInset)
             }
             .padding(.top, Metrics.Space.sm)
             .pageWidth(layout)
@@ -168,8 +168,8 @@ struct HomeScreen: View {
 // MARK: - Header
 
 /// The wordmark sets the app's voice: Archivo Expanded, wide and confident,
-/// with the refraction gradient applied to the mark itself rather than to any
-/// surrounding chrome.
+/// with the refraction gradient applied to the mark itself rather than to
+/// anything around it.
 struct PrismHeader: View {
     @Environment(Router.self) private var router
     @State private var showSearch = false

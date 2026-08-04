@@ -13,6 +13,20 @@ actor YouTubeDataAPI {
 
     private let base = URL(string: "https://www.googleapis.com/youtube/v3/")!
 
+    /// The bearer token for Data API calls.
+    ///
+    /// Comes from the same YouTube sign-in that authenticates InnerTube: the
+    /// device flow requests `auth/youtube` alongside the InnerTube scopes, so one
+    /// token covers both and there is no separate OAuth client to register.
+    ///
+    /// A self-registered OAuth client is still honoured if one is configured,
+    /// which keeps the door open for anyone who wants their own quota rather
+    /// than sharing the TV client's.
+    private static func token() async -> String? {
+        if let session = await AccountSession.shared.accessToken() { return session }
+        return await GoogleAuth.shared.validToken()
+    }
+
     enum APIError: LocalizedError {
         case notSignedIn
         case quotaExceeded
@@ -28,7 +42,7 @@ actor YouTubeDataAPI {
     }
 
     private func get(_ path: String, query: [String: String]) async throws -> [String: Any] {
-        guard let token = await GoogleAuth.shared.validToken() else {
+        guard let token = await Self.token() else {
             throw APIError.notSignedIn
         }
 
@@ -128,7 +142,7 @@ actor YouTubeDataAPI {
 
     /// Like or remove a rating. 50 units.
     func rate(videoID: String, rating: String) async throws {
-        guard let token = await GoogleAuth.shared.validToken() else { throw APIError.notSignedIn }
+        guard let token = await Self.token() else { throw APIError.notSignedIn }
 
         var comps = URLComponents(url: base.appendingPathComponent("videos/rate"), resolvingAgainstBaseURL: false)!
         comps.queryItems = [
@@ -150,7 +164,7 @@ actor YouTubeDataAPI {
     /// it costs an extra lookup to find which subscription points at this
     /// channel.
     func setSubscription(channelID: String, subscribed: Bool) async throws {
-        guard let token = await GoogleAuth.shared.validToken() else { throw APIError.notSignedIn }
+        guard let token = await Self.token() else { throw APIError.notSignedIn }
         guard !channelID.isEmpty else { return }
 
         if subscribed {

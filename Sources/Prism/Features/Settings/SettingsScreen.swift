@@ -15,9 +15,8 @@ struct SettingsScreen: View {
     /// would be ambiguous when they unlock different things.
     private var accountStatus: (title: String, detail: String) {
         switch (session.isSignedIn, auth.isSignedIn) {
-        case (true, true): ("Signed in", "YouTube session and Google account")
-        case (true, false): ("Signed in", "YouTube session only")
-        case (false, true): ("Partly signed in", "Google account only — no age-restricted videos")
+        case (true, _): ("Signed in", "History, subscriptions and age-restricted videos")
+        case (false, true): ("Partly signed in", "API client only — no age-restricted videos")
         case (false, false): ("Not signed in", "Sign in for history and age-restricted videos")
         }
     }

@@ -64,8 +64,8 @@ struct AccountScreen: View {
 
     private var youtubeSession: some View {
         section(
-            "YOUTUBE SESSION",
-            note: "Unlocks age-restricted videos, your watch history, Watch Later, and a home feed based on what you actually watch."
+            "YOUTUBE ACCOUNT",
+            note: "Unlocks age-restricted videos, your watch history, Watch Later, a home feed based on what you actually watch, and your subscriptions — plus liking and subscribing from here. This is the only sign-in most people need."
         ) {
             if session.isSignedIn {
                 statusRow(
@@ -111,8 +111,8 @@ struct AccountScreen: View {
 
     private var googleAccount: some View {
         section(
-            "GOOGLE ACCOUNT",
-            note: "Needed to read your subscription list and to like or subscribe from here."
+            "SEPARATE API CLIENT",
+            note: "Optional. The sign-in above already covers the Data API by sharing the YouTube TV client's quota. Register your own OAuth client only if you'd rather have a private quota."
         ) {
             if auth.isSignedIn {
                 statusRow(

@@ -66,6 +66,11 @@ struct WatchScreen: View {
     @State private var showDescription = false
     @State private var showComments = false
     @State private var isFullscreen = false
+    @State private var session = AccountSession.shared
+
+    /// Either sign-in enables the write actions. The YouTube sign-in now
+    /// requests the Data API scope too, so in practice this is that one.
+    private var isSignedIn: Bool { session.isSignedIn || GoogleAuth.shared.isSignedIn }
 
     var body: some View {
         GeometryReader { geo in
@@ -214,7 +219,7 @@ struct WatchScreen: View {
                            tint: isLiked ? Palette.refract : nil) {
                     isLiked.toggle()
                     Haptics.impact(.medium)
-                    if GoogleAuth.shared.isSignedIn {
+                    if isSignedIn {
                         Task {
                             try? await YouTubeDataAPI.shared.rate(
                                 videoID: video.id,
@@ -229,7 +234,7 @@ struct WatchScreen: View {
                     isDisliked.toggle()
                     if isDisliked { isLiked = false }
                     Haptics.impact(.medium)
-                    if GoogleAuth.shared.isSignedIn {
+                    if isSignedIn {
                         Task {
                             try? await YouTubeDataAPI.shared.rate(
                                 videoID: video.id,
@@ -244,7 +249,7 @@ struct WatchScreen: View {
                            prominent: !isSubscribed) {
                     isSubscribed.toggle()
                     Haptics.impact(.medium)
-                    if GoogleAuth.shared.isSignedIn {
+                    if isSignedIn {
                         Task {
                             try? await YouTubeDataAPI.shared.setSubscription(
                                 channelID: video.channelID,

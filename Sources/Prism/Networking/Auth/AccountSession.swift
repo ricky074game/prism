@@ -47,7 +47,27 @@ final class AccountSession {
     private enum TV {
         static let clientID = "861556708454-d6dlm3lh05idd8npek18k6be8ba3oc68.apps.googleusercontent.com"
         static let clientSecret = "SboVhoG9s0rNafixCSGGKXAT"
-        static let scope = "http://gdata.youtube.com https://www.googleapis.com/auth/youtube-paid-content"
+
+        /// Three scopes, and the middle one is the reason there is only one
+        /// sign-in in this app rather than two.
+        ///
+        /// - `gdata.youtube.com` is the legacy first-party scope InnerTube's
+        ///   playback path wants.
+        /// - `auth/youtube` is the ordinary Data API read/write scope, covering
+        ///   subscriptions, ratings and playlist edits.
+        ///
+        /// The TV client is allowlisted for both, so a single token authenticates
+        /// InnerTube *and* googleapis.com — no separate OAuth client, and nothing
+        /// to register in Cloud Console.
+        ///
+        /// `youtube.force-ssl` is deliberately absent: requesting it alongside
+        /// these returns `invalid_scope`, and `auth/youtube` already grants the
+        /// same read/write access.
+        static let scope = [
+            "http://gdata.youtube.com",
+            "https://www.googleapis.com/auth/youtube",
+            "https://www.googleapis.com/auth/youtube-paid-content",
+        ].joined(separator: " ")
         static let codeURL = URL(string: "https://www.youtube.com/o/oauth2/device/code")!
         static let tokenURL = URL(string: "https://www.youtube.com/o/oauth2/token")!
     }
@@ -129,6 +149,15 @@ final class AccountSession {
     }
 
     // MARK: Request signing
+
+    /// A valid access token, refreshed if needed.
+    ///
+    /// Shared by InnerTube and the Data API — the same token authenticates both,
+    /// because the sign-in requests scopes for each.
+    func accessToken() async -> String? {
+        await authHeaders()["Authorization"]?
+            .replacingOccurrences(of: "Bearer ", with: "")
+    }
 
     /// The header that authenticates an InnerTube request, refreshed if needed.
     ///

@@ -65,6 +65,28 @@ struct SettingsScreen: View {
                             .foregroundStyle(Palette.refract)
                         }
                     }
+                    row("Skip by") {
+                        Menu {
+                            ForEach(Settings.seekOptions, id: \.self) { seconds in
+                                Button("\(seconds) seconds") { settings.seekInterval = seconds }
+                            }
+                        } label: {
+                            HStack(spacing: 4) {
+                                Text("\(settings.seekInterval)s").font(Type.metaEmphasis)
+                                Image(systemName: "chevron.up.chevron.down").font(.system(size: 9, weight: .bold))
+                            }
+                            .foregroundStyle(Palette.refract)
+                        }
+                    }
+
+                    Text("Double-tap either side of the video to jump by this much.")
+                        .font(Type.labelSmall)
+                        .foregroundStyle(Palette.textTertiary)
+                        .padding(.bottom, Metrics.Space.md)
+
+                    toggleRow("Captions by default", isOn: $settings.autoCaptions,
+                              note: "Turns captions on automatically when a video has them.")
+
                     toggleRow("Ambient glow", isOn: $settings.ambientGlow,
                               note: "Lights the interface with the video's colours.")
                     toggleRow("Haptics", isOn: $settings.hapticsEnabled)

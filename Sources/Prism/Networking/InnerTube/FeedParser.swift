@@ -51,12 +51,62 @@ enum FeedParser {
     static func shorts(from json: [String: Any]) -> [Video] {
         var found: [Video] = []
         var seen = Set<String>()
-        for key in ["reelItemRenderer", "shortsLockupViewModel"] {
-            harvest(json, key: key) { r in
-                if let v = video(from: r, isShort: true), seen.insert(v.id).inserted { found.append(v) }
-            }
+
+        // The current shape. Shorts moved to their own view-model and share
+        // almost nothing with `videoRenderer`: the id is in `entityId` or the
+        // tap endpoint, and the title lives under `overlayMetadata` keyed on
+        // `content` rather than `text` — so the generic renderer parser finds no
+        // title and silently drops every item.
+        harvest(json, key: "shortsLockupViewModel") { r in
+            if let v = shortsLockup(from: r), seen.insert(v.id).inserted { found.append(v) }
+        }
+        // Older surfaces.
+        harvest(json, key: "reelItemRenderer") { r in
+            if let v = video(from: r, isShort: true), seen.insert(v.id).inserted { found.append(v) }
         }
         return found
+    }
+
+    /// `shortsLockupViewModel` → `Video`.
+    private static func shortsLockup(from r: [String: Any]) -> Video? {
+        // Prefer the tap endpoint; `entityId` is prefixed and only used as a
+        // fallback when the endpoint shape changes.
+        let fromTap = ((r["onTap"] as? [String: Any])?["innertubeCommand"] as? [String: Any])
+            .flatMap { command -> String? in
+                if let reel = command["reelWatchEndpoint"] as? [String: Any] {
+                    return reel["videoId"] as? String
+                }
+                if let watch = command["watchEndpoint"] as? [String: Any] {
+                    return watch["videoId"] as? String
+                }
+                return nil
+            }
+        let fromEntity = (r["entityId"] as? String)?
+            .replacingOccurrences(of: "shorts-shelf-item-", with: "")
+
+        guard let id = fromTap ?? fromEntity, id.count == 11 else { return nil }
+
+        let overlay = r["overlayMetadata"] as? [String: Any]
+        let title = (overlay?["primaryText"] as? [String: Any])?["content"] as? String
+            ?? r["accessibilityText"] as? String
+            ?? ""
+        guard !title.isEmpty else { return nil }
+
+        let views = (overlay?["secondaryText"] as? [String: Any])?["content"] as? String ?? ""
+
+        return Video(
+            id: id,
+            title: title,
+            channelName: "",
+            channelID: "",
+            channelThumbnailURL: nil,
+            thumbnailURL: Video.thumbnail(id, quality: "oar2"),
+            duration: 0,
+            viewCountText: views,
+            publishedText: "",
+            isLive: false,
+            isShort: true
+        )
     }
 
     /// The token that fetches the next page, wherever it appears.

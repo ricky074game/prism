@@ -61,20 +61,40 @@ struct WatchScreen: View {
     @State private var glow = GlowSource()
     @State private var dragOffset: CGFloat = 0
     @State private var isLiked = false
+    @State private var isDisliked = false
+    @State private var isSubscribed = false
     @State private var showDescription = false
     @State private var showComments = false
+    @State private var isFullscreen = false
 
     var body: some View {
         GeometryReader { geo in
-            VStack(spacing: 0) {
-                playerPane(width: geo.size.width)
-                details
+            if isFullscreen {
+                // Fills the screen and rotates the *content* rather than asking
+                // the system for a landscape orientation. Forcing rotation is
+                // unreliable across iOS versions and fights the user if their
+                // rotation lock is on; this always works and is instant.
+                ZStack {
+                    Color.black
+                    playerPane(width: geo.size.height, height: geo.size.width)
+                        .rotationEffect(.degrees(90))
+                        .frame(width: geo.size.width, height: geo.size.height)
+                }
+                .ignoresSafeArea()
+                .statusBarHidden()
+                .transition(.opacity)
+            } else {
+                VStack(spacing: 0) {
+                    playerPane(width: geo.size.width, height: geo.size.width * 9 / 16)
+                    details
+                }
+                .background(Palette.ink.ignoresSafeArea())
+                .offset(y: dragOffset)
+                .gesture(dismissGesture)
             }
-            .background(Palette.ink.ignoresSafeArea())
-            .offset(y: dragOffset)
-            .gesture(dismissGesture)
         }
         .ignoresSafeArea(edges: .bottom)
+        .motion(Motion.hero, value: isFullscreen)
         .task {
             glow.load(video.thumbnailURL)
             await model.load(video: video, into: player, settings: settings)
@@ -83,7 +103,7 @@ struct WatchScreen: View {
 
     // MARK: Player
 
-    private func playerPane(width: CGFloat) -> some View {
+    private func playerPane(width: CGFloat, height: CGFloat) -> some View {
         ZStack {
             Color.black
 
@@ -103,9 +123,9 @@ struct WatchScreen: View {
                     .tint(.white)
             }
 
-            PlayerControls(video: video)
+            PlayerControls(video: video, isFullscreen: $isFullscreen)
         }
-        .frame(width: width, height: width * 9 / 16)
+        .frame(width: width, height: height)
         .clipped()
         .background {
             if settings.ambientGlow {
@@ -203,8 +223,36 @@ struct WatchScreen: View {
                         }
                     }
                 }
-                PillButton(icon: "hand.thumbsdown", title: nil) {}
-                PillButton(icon: "bell", title: "Subscribe", prominent: true) {}
+                PillButton(icon: isDisliked ? "hand.thumbsdown.fill" : "hand.thumbsdown",
+                           title: nil,
+                           tint: isDisliked ? Palette.textPrimary : nil) {
+                    isDisliked.toggle()
+                    if isDisliked { isLiked = false }
+                    Haptics.impact(.medium)
+                    if GoogleAuth.shared.isSignedIn {
+                        Task {
+                            try? await YouTubeDataAPI.shared.rate(
+                                videoID: video.id,
+                                rating: isDisliked ? "dislike" : "none"
+                            )
+                        }
+                    }
+                }
+
+                PillButton(icon: isSubscribed ? "bell.fill" : "bell",
+                           title: isSubscribed ? "Subscribed" : "Subscribe",
+                           prominent: !isSubscribed) {
+                    isSubscribed.toggle()
+                    Haptics.impact(.medium)
+                    if GoogleAuth.shared.isSignedIn {
+                        Task {
+                            try? await YouTubeDataAPI.shared.setSubscription(
+                                channelID: video.channelID,
+                                subscribed: isSubscribed
+                            )
+                        }
+                    }
+                }
                 // ShareLink presents the system share sheet itself, so it is
                 // the button rather than something a button opens.
                 ShareLink(item: URL(string: "https://youtu.be/\(video.id)")!) {

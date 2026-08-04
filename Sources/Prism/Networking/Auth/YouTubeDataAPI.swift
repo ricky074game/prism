@@ -144,6 +144,43 @@ actor YouTubeDataAPI {
         _ = try await URLSession.shared.data(for: req)
     }
 
+    /// Subscribe to or unsubscribe from a channel. 50 units either way.
+    ///
+    /// Unsubscribing needs the *subscription's* id rather than the channel's, so
+    /// it costs an extra lookup to find which subscription points at this
+    /// channel.
+    func setSubscription(channelID: String, subscribed: Bool) async throws {
+        guard let token = await GoogleAuth.shared.validToken() else { throw APIError.notSignedIn }
+        guard !channelID.isEmpty else { return }
+
+        if subscribed {
+            var request = URLRequest(url: base.appendingPathComponent("subscriptions")
+                .appending(queryItems: [URLQueryItem(name: "part", value: "snippet")]))
+            request.httpMethod = "POST"
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.httpBody = try JSONSerialization.data(withJSONObject: [
+                "snippet": ["resourceId": ["kind": "youtube#channel", "channelId": channelID]]
+            ])
+            _ = try await URLSession.shared.data(for: request)
+        } else {
+            let json = try await get("subscriptions", query: [
+                "part": "id",
+                "mine": "true",
+                "forChannelId": channelID,
+            ])
+            guard let items = json["items"] as? [[String: Any]],
+                  let id = items.first?["id"] as? String
+            else { return }
+
+            var request = URLRequest(url: base.appendingPathComponent("subscriptions")
+                .appending(queryItems: [URLQueryItem(name: "id", value: id)]))
+            request.httpMethod = "DELETE"
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+            _ = try await URLSession.shared.data(for: request)
+        }
+    }
+
     /// "3 days ago" from an ISO-8601 timestamp.
     private static func relativeDate(_ iso: String?) -> String {
         guard let iso, let date = ISO8601DateFormatter().date(from: iso) else { return "" }

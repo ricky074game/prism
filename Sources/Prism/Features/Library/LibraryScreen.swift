@@ -22,9 +22,10 @@ final class LibraryModel {
         isLoading = true
         defer { isLoading = false }
 
-        // Trending needs no account and gives the screen something to show
-        // while signed out.
-        async let trendingTask = try? FeedRepository.shared.feed(.trending)
+        // Not FEtrending — YouTube retired the Trending tab and that browse id
+        // now returns HTTP 400. The discovery feed gives the screen something
+        // real to show while signed out.
+        async let discoverTask = try? FeedRepository.shared.discoveryFeed()
 
         if signedIn {
             // These surfaces only return the user's own data when the request
@@ -38,7 +39,7 @@ final class LibraryModel {
             history = await historyTask?.videos ?? []
         }
 
-        trending = await trendingTask?.videos ?? []
+        trending = await discoverTask ?? []
     }
 }
 
@@ -65,7 +66,7 @@ struct LibraryScreen: View {
                     playlistShelf
                 }
 
-                shelf("Trending", model.trending, icon: "flame.fill")
+                shelf("Discover", model.trending, icon: "sparkles")
 
                 Color.clear.frame(height: TabBar.height + Metrics.Space.xxl)
             }

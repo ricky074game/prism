@@ -223,6 +223,10 @@ final class PlayerEngine {
         observeItem(item)
         player.replaceCurrentItem(with: item)
 
+        captionOptions = []
+        activeCaption = .off
+        Task { await loadCaptionOptions(for: item) }
+
         if startAt > 0 {
             // Completion-handler form: the bare `seek` resolves to the `async`
             // overload when this is reached from an async caller.
@@ -360,6 +364,8 @@ final class PlayerEngine {
 
     func play() {
         player.play()
+        // Restore the chosen speed; `play()` always resumes at 1×.
+        if playbackRate != 1.0 { player.rate = Float(playbackRate) }
         isPlaying = true
         updateNowPlaying()
     }
@@ -384,6 +390,73 @@ final class PlayerEngine {
     }
 
     func skip(by delta: Double) { seek(to: currentTime + delta) }
+
+    /// Playback speed. Kept separately from `rate` because pausing sets the
+    /// player's rate to 0, and resuming must restore the chosen speed rather
+    /// than snapping back to 1×.
+    private(set) var playbackRate: Double = 1.0
+
+    func setPlaybackRate(_ rate: Double) {
+        playbackRate = rate
+        if isPlaying { player.rate = Float(rate) }
+    }
+
+    // MARK: Captions
+
+    /// Subtitle tracks offered by the current item.
+    ///
+    /// Nothing here is custom: the HLS manifest carries the subtitle renditions
+    /// (35 languages on a typical video), so AVFoundation already exposes them
+    /// as a media selection group and renders them itself. Prism only has to
+    /// present the list and set the choice.
+    private(set) var captionOptions: [CaptionOption] = []
+    private(set) var activeCaption: CaptionOption?
+
+    struct CaptionOption: Identifiable, Hashable, Sendable {
+        let id: String
+        let title: String
+        /// Nil means "off".
+        let languageCode: String?
+
+        static let off = CaptionOption(id: "off", title: "Off", languageCode: nil)
+    }
+
+    private func loadCaptionOptions(for item: AVPlayerItem) async {
+        guard let group = try? await item.asset.loadMediaSelectionGroup(for: .legible) else {
+            captionOptions = []
+            return
+        }
+
+        // `.filterMediaOptions` drops forced subtitles, which aren't a user
+        // choice — they're burned-in translations for foreign-language dialogue.
+        let options = AVMediaSelectionGroup.playableMediaSelectionOptions(from: group.options)
+
+        captionOptions = [.off] + options.compactMap { option in
+            guard let code = option.locale?.identifier else { return nil }
+            return CaptionOption(
+                id: code,
+                title: option.displayName,
+                languageCode: code
+            )
+        }
+        activeCaption = .off
+    }
+
+    func selectCaption(_ option: CaptionOption) {
+        guard let item = player.currentItem else { return }
+        activeCaption = option
+
+        Task {
+            guard let group = try? await item.asset.loadMediaSelectionGroup(for: .legible) else { return }
+            guard let code = option.languageCode else {
+                item.select(nil, in: group)
+                return
+            }
+            let match = AVMediaSelectionGroup.playableMediaSelectionOptions(from: group.options)
+                .first { $0.locale?.identifier == code }
+            item.select(match, in: group)
+        }
+    }
 
     func setRate(_ rate: Float) {
         player.rate = rate

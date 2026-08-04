@@ -7,13 +7,19 @@ import SwiftUI
 /// thing under the user's finger is never right.
 struct PlayerControls: View {
     let video: Video
+    @Binding var isFullscreen: Bool
 
     @Environment(PlayerEngine.self) private var player
     @Environment(Router.self) private var router
 
+    @Environment(Settings.self) private var settings
+
     @State private var isVisible = true
     @State private var hideTask: Task<Void, Never>?
-    @State private var showQuality = false
+    @State private var showOptions = false
+    /// Non-zero briefly after a double-tap, to show the ripple. Sign gives the
+    /// direction.
+    @State private var seekFlash = 0
 
     var body: some View {
         ZStack {
@@ -26,6 +32,14 @@ struct PlayerControls: View {
             .opacity(isVisible ? 1 : 0)
             .allowsHitTesting(false)
 
+            // Double-tap zones sit *under* the controls so the buttons still win
+            // a hit. Each side is its own gesture target — a single gesture on
+            // the whole frame can't tell left from right.
+            HStack(spacing: 0) {
+                seekZone(direction: -1)
+                seekZone(direction: 1)
+            }
+
             VStack {
                 topBar
                 Spacer()
@@ -34,18 +48,63 @@ struct PlayerControls: View {
                 bottomBar
             }
             .opacity(isVisible ? 1 : 0)
+            // Hidden controls must not swallow taps meant for the seek zones.
+            .allowsHitTesting(isVisible)
+
+            seekRipple
         }
-        .contentShape(Rectangle())
-        .onTapGesture { toggle() }
         .motion(Motion.standard, value: isVisible)
         .onAppear { scheduleHide() }
         .onChange(of: player.isPlaying) { _, playing in
             if playing { scheduleHide() } else { show() }
         }
-        .sheet(isPresented: $showQuality) {
-            QualitySheet()
-                .presentationDetents([.medium])
-                .presentationBackground(.ultraThinMaterial)
+        .sheet(isPresented: $showOptions) {
+            PlayerOptionsSheet()
+                .presentationDetents([.medium, .large])
+        }
+    }
+
+    // MARK: Double-tap seek
+
+    /// Half the frame. A single tap toggles the controls, a double-tap seeks by
+    /// the interval chosen in Settings.
+    private func seekZone(direction: Int) -> some View {
+        Color.clear
+            .contentShape(Rectangle())
+            .onTapGesture(count: 2) {
+                let delta = Double(direction * settings.seekInterval)
+                player.skip(by: delta)
+                Haptics.impact(.medium)
+                withAnimation(Motion.quick) { seekFlash = direction }
+                Task {
+                    try? await Task.sleep(for: .milliseconds(550))
+                    withAnimation(Motion.quick) { seekFlash = 0 }
+                }
+                cancelHide()
+                scheduleHide()
+            }
+            .onTapGesture { toggle() }
+    }
+
+    @ViewBuilder
+    private var seekRipple: some View {
+        if seekFlash != 0 {
+            HStack(spacing: 0) {
+                if seekFlash > 0 { Spacer() }
+                VStack(spacing: 6) {
+                    Image(systemName: seekFlash > 0 ? "goforward" : "gobackward")
+                        .font(.system(size: 30, weight: .medium))
+                    Text("\(settings.seekInterval)s")
+                        .font(Type.readout)
+                }
+                .foregroundStyle(.white)
+                .frame(width: 110, height: 110)
+                .background(.black.opacity(0.35), in: Circle())
+                if seekFlash < 0 { Spacer() }
+            }
+            .padding(.horizontal, Metrics.Space.xl)
+            .transition(.opacity.combined(with: .scale(scale: 0.8)))
+            .allowsHitTesting(false)
         }
     }
 
@@ -66,17 +125,37 @@ struct PlayerControls: View {
 
             Spacer()
 
-            Button { showQuality = true } label: {
-                HStack(spacing: 5) {
-                    Text(player.currentQuality.title).font(Type.labelSmall)
-                    Image(systemName: "chevron.up.chevron.down").font(.system(size: 8, weight: .bold))
+            // Only shown when the video actually has captions, so the control
+            // never lies about what's available.
+            if !player.captionOptions.isEmpty {
+                Button {
+                    let isOn = player.activeCaption?.languageCode != nil
+                    if isOn {
+                        player.selectCaption(.off)
+                    } else if let first = player.captionOptions.first(where: { $0.languageCode != nil }) {
+                        player.selectCaption(first)
+                    }
+                    Haptics.selection()
+                } label: {
+                    Image(systemName: player.activeCaption?.languageCode != nil
+                          ? "captions.bubble.fill" : "captions.bubble")
+                        .font(.system(size: 15, weight: .medium))
+                        .foregroundStyle(.white)
+                        .frame(width: 34, height: 34)
+                        .background(.black.opacity(0.3), in: Circle())
                 }
-                .foregroundStyle(.white)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 7)
-                .background(.black.opacity(0.3), in: Capsule())
+                .accessibilityLabel(player.activeCaption?.languageCode != nil
+                                    ? "Turn captions off" : "Turn captions on")
             }
-            .accessibilityLabel("Video quality")
+
+            Button { showOptions = true } label: {
+                Image(systemName: "gearshape.fill")
+                    .font(.system(size: 15, weight: .medium))
+                    .foregroundStyle(.white)
+                    .frame(width: 34, height: 34)
+                    .background(.black.opacity(0.3), in: Circle())
+            }
+            .accessibilityLabel("Playback options")
         }
         .padding(Metrics.Space.md)
     }
@@ -84,7 +163,12 @@ struct PlayerControls: View {
     /// Three controls, evenly weighted: back ten, play/pause, forward ten.
     private var centreTransport: some View {
         HStack(spacing: Metrics.Space.huge) {
-            transportButton("gobackward.10", size: 22) { player.skip(by: -10) }
+            // The glyph follows the configured interval — SF Symbols ship
+            // dedicated 5/10/15/30/45/60 variants, so the icon states the real
+            // number instead of always claiming 10.
+            transportButton("gobackward.\(settings.seekInterval)", fallback: "gobackward", size: 22) {
+                player.skip(by: -Double(settings.seekInterval))
+            }
 
             Button {
                 player.togglePlayPause()
@@ -102,20 +186,31 @@ struct PlayerControls: View {
             }
             .accessibilityLabel(player.isPlaying ? "Pause" : "Play")
 
-            transportButton("goforward.10", size: 22) { player.skip(by: 10) }
+            transportButton("goforward.\(settings.seekInterval)", fallback: "goforward", size: 22) {
+                player.skip(by: Double(settings.seekInterval))
+            }
         }
     }
 
-    private func transportButton(_ icon: String, size: CGFloat, action: @escaping () -> Void) -> some View {
-        Button {
+    private func transportButton(
+        _ icon: String,
+        fallback: String,
+        size: CGFloat,
+        action: @escaping () -> Void
+    ) -> some View {
+        // An interval with no matching symbol would otherwise render as a blank
+        // square.
+        let name = UIImage(systemName: icon) != nil ? icon : fallback
+        return Button {
             action()
             Haptics.impact(.light)
         } label: {
-            Image(systemName: icon)
+            Image(systemName: name)
                 .font(.system(size: size, weight: .medium))
                 .foregroundStyle(.white)
                 .frame(width: 48, height: 48)
         }
+        .accessibilityLabel("\(fallback == "goforward" ? "Forward" : "Back") \(settings.seekInterval) seconds")
     }
 
     private var bottomBar: some View {
@@ -151,6 +246,19 @@ struct PlayerControls: View {
                 Text(player.duration.timecode)
                     .font(Type.readout)
                     .foregroundStyle(.white.opacity(0.6))
+
+                Button {
+                    withAnimation(Motion.hero) { isFullscreen.toggle() }
+                    Haptics.impact(.medium)
+                } label: {
+                    Image(systemName: isFullscreen
+                          ? "arrow.down.right.and.arrow.up.left"
+                          : "arrow.up.left.and.arrow.down.right")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .frame(width: 30, height: 30)
+                }
+                .accessibilityLabel(isFullscreen ? "Exit full screen" : "Full screen")
             }
             .motion(Motion.quick, value: player.currentChapter?.id)
         }

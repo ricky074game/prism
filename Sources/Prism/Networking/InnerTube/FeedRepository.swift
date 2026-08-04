@@ -9,13 +9,28 @@ actor FeedRepository {
     private let ttl: TimeInterval = 300
 
     /// InnerTube browse IDs for the built-in surfaces.
+    ///
+    /// `FEtrending` is deliberately absent — YouTube retired the Trending tab
+    /// and the browse id now returns HTTP 400 "Request contains an invalid
+    /// argument". Anything asking for trending gets the discovery feed instead.
     enum Surface: String {
         case home = "FEwhat_to_watch"
-        case trending = "FEtrending"
         case subscriptions = "FEsubscriptions"
         case library = "FElibrary"
         case history = "FEhistory"
     }
+
+    /// Topics used to build a feed when there's nothing personal to show.
+    ///
+    /// Signed out, YouTube's home feed is genuinely empty — it replies "Try
+    /// searching to get started", because with no watch history it has nothing
+    /// to recommend. Rather than render that as a blank screen, Prism assembles
+    /// a feed from a handful of broad searches. They're deliberately varied so
+    /// the result reads as a discovery feed rather than one topic.
+    private static let discoveryTopics = [
+        "documentary", "how it's made", "live performance",
+        "space", "cooking", "architecture", "field recording",
+    ]
 
     struct Page: Sendable {
         let videos: [Video]
@@ -30,11 +45,50 @@ actor FeedRepository {
         }
 
         let json = try await client.browse(browseID: surface.rawValue)
-        let videos = FeedParser.videos(from: json)
-        let token = FeedParser.continuationToken(from: json)
+        var videos = FeedParser.videos(from: json)
+        var token = FeedParser.continuationToken(from: json)
+
+        // Signed out, home comes back with no items at all — YouTube has no
+        // history to build recommendations from. Falling back keeps the app
+        // from opening on a blank screen.
+        if videos.isEmpty, surface == .home {
+            videos = try await discoveryFeed()
+            token = nil
+        }
 
         cache[key] = (Date(), videos, token)
         return Page(videos: videos, continuation: token)
+    }
+
+    /// A feed assembled from several broad searches, interleaved.
+    ///
+    /// Searches run concurrently and results are round-robined rather than
+    /// concatenated, so the feed doesn't open with seven documentaries followed
+    /// by seven cooking videos.
+    func discoveryFeed() async throws -> [Video] {
+        let topics = Self.discoveryTopics.shuffled()
+
+        let batches = await withTaskGroup(of: [Video].self) { group in
+            for topic in topics.prefix(5) {
+                group.addTask { [client] in
+                    guard let json = try? await client.search(topic) else { return [] }
+                    return Array(FeedParser.videos(from: json).prefix(6))
+                }
+            }
+            var all: [[Video]] = []
+            for await batch in group { all.append(batch) }
+            return all
+        }
+
+        var interleaved: [Video] = []
+        var seen = Set<String>()
+        for index in 0..<(batches.map(\.count).max() ?? 0) {
+            for batch in batches where index < batch.count {
+                let video = batch[index]
+                if seen.insert(video.id).inserted { interleaved.append(video) }
+            }
+        }
+        return interleaved
     }
 
     func more(_ surface: Surface, continuation: String) async throws -> Page {
@@ -58,16 +112,22 @@ actor FeedRepository {
         )
     }
 
-    /// Shorts come from the home surface's reel shelves, filtered to the
-    /// vertical format.
+    /// Shorts.
+    ///
+    /// Search is the primary source rather than the home shelf: signed out,
+    /// home has no shelves at all, so the shelf-first order returned nothing.
     func shorts(refresh: Bool = false) async throws -> Page {
-        let json = try await client.browse(browseID: Surface.home.rawValue)
+        let json = try await client.search("#shorts")
         var found = FeedParser.shorts(from: json)
+
         if found.isEmpty {
-            // Some regions don't surface a reel shelf on home; searching is a
-            // dependable fallback.
-            let alt = try await client.search("#shorts")
-            found = FeedParser.videos(from: alt).filter { $0.duration > 0 && $0.duration <= 90 }
+            // Home carries a reel shelf once there's a session behind it.
+            let home = try await client.browse(browseID: Surface.home.rawValue)
+            found = FeedParser.shorts(from: home)
+        }
+        if found.isEmpty {
+            // Last resort — treat short regular results as shorts.
+            found = FeedParser.videos(from: json).filter { $0.duration > 0 && $0.duration <= 90 }
         }
         return Page(videos: found, continuation: nil)
     }

@@ -34,6 +34,25 @@ final class Settings {
         didSet { defaults.set(showShorts, forKey: Keys.shorts) }
     }
 
+    /// Seconds jumped by a double-tap on either side of the player, and by the
+    /// on-screen skip buttons.
+    var seekInterval: Int {
+        didSet { defaults.set(seekInterval, forKey: Keys.seek) }
+    }
+
+    /// Turn captions on automatically when a video has them.
+    var autoCaptions: Bool {
+        didSet { defaults.set(autoCaptions, forKey: Keys.autoCaptions) }
+    }
+
+    /// Remembered across videos, the way every other player behaves.
+    var playbackRate: Double {
+        didSet { defaults.set(playbackRate, forKey: Keys.rate) }
+    }
+
+    static let seekOptions = [5, 10, 15, 30, 45, 60]
+    static let rateOptions: [Double] = [0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0]
+
     private let defaults = UserDefaults.standard
 
     private enum Keys {
@@ -43,6 +62,9 @@ final class Settings {
         static let haptics = "haptics.enabled"
         static let glow = "ambient.glow"
         static let shorts = "shorts.visible"
+        static let seek = "player.seekInterval"
+        static let autoCaptions = "player.autoCaptions"
+        static let rate = "player.rate"
     }
 
     init() {
@@ -52,12 +74,18 @@ final class Settings {
             Keys.haptics: true,
             Keys.glow: true,
             Keys.shorts: true,
+            Keys.seek: 10,
+            Keys.autoCaptions: false,
+            Keys.rate: 1.0,
         ])
 
         sponsorBlockEnabled = d.bool(forKey: Keys.sponsorBlock)
         hapticsEnabled = d.bool(forKey: Keys.haptics)
         ambientGlow = d.bool(forKey: Keys.glow)
         showShorts = d.bool(forKey: Keys.shorts)
+        seekInterval = d.integer(forKey: Keys.seek)
+        autoCaptions = d.bool(forKey: Keys.autoCaptions)
+        playbackRate = d.double(forKey: Keys.rate)
         preferredQuality = VideoQuality(rawValue: d.string(forKey: Keys.quality) ?? "") ?? .auto
 
         if let raw = d.dictionary(forKey: Keys.actions) as? [String: String] {

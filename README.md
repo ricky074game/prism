@@ -68,6 +68,38 @@ This is inherently fragile. It depends on clients Google has not yet gated, and
 it will break. When it does, the fix is usually a client version bump in
 `InnerTubeClientProfile`, not a rewrite.
 
+## iPhone and iPad
+
+One binary, one bundle id, one signature. `TARGETED_DEVICE_FAMILY` is `1,2`, so
+the `.ipa` installs on both — an iPad build is not a separate app and doesn't
+need separate signing or a second developer account. If your provisioning
+profile is a *development* one it pins device UDIDs, so add the iPad's and
+re-sign; that costs nothing.
+
+The layout is decided once, in `RootView`, from the size the app actually
+occupies — **not** from `userInterfaceIdiom`. That distinction is the whole
+design: a Slide Over panel is 320pt wide and reports an iPad idiom the entire
+time, and a navigation rail crushed into that column is the classic iPad-port
+mistake. Every screen reads `PrismLayout` out of the environment, so a Split
+View resize moves all of them together.
+
+| | Phone / narrow | iPad / wide |
+|---|---|---|
+| Navigation | bottom bar | side rail, which also takes over the wordmark and the search and settings buttons |
+| Feed | one column | grid, sized from a target cell width rather than breakpoints |
+| Hero | 16:9 | 2.4:1 — 16:9 at 1400pt is 790pt of masthead |
+| Watch | up next below the fold | up next in its own column, landscape only |
+| Shorts | full width | 9:16, centred, over a blurred backdrop |
+
+Fullscreen rotates its *content* rather than asking the system for an
+orientation, because forcing rotation is unreliable across iOS versions and
+fights the user's rotation lock. That's right on a phone and wrong on an iPad,
+where the window is usually landscape already — so it now rotates only when the
+window is portrait.
+
+`LayoutTests` pins the breakpoints at the sizes nobody screenshots: Slide Over,
+a Split View half, a 4000pt window.
+
 ## SponsorBlock
 
 Segment data comes from [SponsorBlock](https://sponsor.ajay.app). Prism uses the
@@ -88,7 +120,10 @@ compiler**. There is no `.xcodeproj` in the repo — it's generated from
 
 - **`.github/workflows/build.yml`** produces an unsigned `.ipa` artifact.
 - **`.github/workflows/screenshots.yml`** boots an iOS Simulator, runs the app
-  against bundled fixture data, and captures real PNGs.
+  against bundled fixture data, and captures real PNGs. It does this twice —
+  iPhone and iPad — through the same `scripts/capture.sh`, so the two can't
+  drift into capturing different screens, which is how an iPad regression stays
+  invisible behind green phone shots.
 
 **Pin the run.** Artifacts keep their name across runs, so `--name` on its own
 matches every past copy and downloads them all into one directory, where they
@@ -107,6 +142,7 @@ RID=$(gh run list --workflow=screenshots.yml --status=success --limit 1 \
         --json databaseId --jq '.[0].databaseId')
 gh run download "$RID" --name Prism-simulator-app --dir simulator
 gh run download "$RID" --name screenshots         --dir shots
+gh run download "$RID" --name screenshots-ipad    --dir shots-ipad
 ```
 
 Always pass `--dir` as well; some `gh` versions refuse to extract into the
@@ -199,8 +235,13 @@ YouTube sign-in works without any of that.
 ## Status
 
 Working: home feed, search, watch with HLS playback, SponsorBlock skipping,
-Shorts, comments, playlists, library (history, liked, Watch Later), chapters,
-quality selection, likes, background audio, both sign-ins.
+Shorts, channels with community posts, comments, playlists, library (history,
+liked, Watch Later), chapters, quality selection, likes, Picture in Picture,
+background audio, both sign-ins. Universal — iPhone and iPad.
+
+A channel's Shorts tab opens the vertical feed at the one you tapped and keeps
+scrolling into the rest of that creator's shorts, rather than dropping you into
+the ordinary watch screen.
 
 Not built: uploading, live chat, and the AI summary features — the last
 deliberately.
@@ -245,6 +286,11 @@ against live responses rather than documentation:
   `commentViewModel` entries; the data lives in
   `frameworkUpdates.entityBatchUpdate` mutations, joined by `commentKey`.
 - **Playlists** return zero `playlistVideoRenderer`s and 100 `lockupViewModel`s.
+- **Shorts** are `shortsLockupViewModel`, which shares almost nothing with
+  `videoRenderer`: the id is in `entityId` or the tap endpoint, and the title
+  sits under `overlayMetadata` keyed on `content` rather than `text`. Continuations
+  have to carry the tab through for the same reason — a shorts page parsed as
+  videos comes back empty and reads as a channel that ran out of shorts.
 
 A parser written from the documented shape returns an empty list rather than
 erroring — it looks like "no comments" instead of "broken parser". The parsers

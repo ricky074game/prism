@@ -109,10 +109,33 @@ enum FeedParser {
         )
     }
 
-    /// The token that fetches the next page, wherever it appears.
+    /// The token that fetches the next page.
+    ///
+    /// Deliberately *not* the first one in the tree. A channel tab carries
+    /// three continuations, and the one a whole-tree walk reaches first belongs
+    /// to the **About** panel — following it appends a channel description
+    /// where the next page of videos should be, so paging looks like a channel
+    /// that ran out of uploads after one page.
+    ///
+    /// Verified against live responses for three channels: the grid's own token
+    /// is always inside `richGridRenderer`, and following it yields 48 fresh
+    /// items a page with no repeats. Surfaces with no grid — search, and every
+    /// continuation response, which arrives as a bare append action — fall
+    /// through to the whole-tree walk and are unaffected.
     static func continuationToken(from json: [String: Any]) -> String? {
+        for container in ["richGridRenderer", "gridRenderer", "reelShelfRenderer"] {
+            var token: String?
+            harvest(json, key: container) { grid in
+                if token == nil { token = firstContinuation(in: grid) }
+            }
+            if let token { return token }
+        }
+        return firstContinuation(in: json)
+    }
+
+    private static func firstContinuation(in root: Any) -> String? {
         var token: String?
-        harvest(json, key: "continuationItemRenderer") { r in
+        harvest(root, key: "continuationItemRenderer") { r in
             guard token == nil else { return }
             token = (r["continuationEndpoint"] as? [String: Any])
                 .flatMap { $0["continuationCommand"] as? [String: Any] }

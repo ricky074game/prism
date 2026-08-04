@@ -52,20 +52,25 @@ jobs:
       # BrowserStack, LambdaTest) want — they run a real Simulator in the cloud,
       # so they need the iphonesimulator slice, not the device .ipa. It's already
       # been built above; this just keeps it.
-      - name: Package simulator app
+      - name: Stage simulator app
         run: |
           APP=$(find build/Build/Products -name "Prism.app" -maxdepth 3 | head -1)
-          echo "packaging $APP"
-          # Zipped from inside the directory so the archive contains Prism.app
-          # at its root, which is the layout these services expect.
-          (cd "$(dirname "$APP")" && zip -qry "$OLDPWD/Prism-simulator.zip" "Prism.app")
-          ls -lh Prism-simulator.zip
+          echo "staging $APP"
+          rm -rf simulator && mkdir simulator
+          cp -R "$APP" simulator/
+          du -sh simulator/Prism.app
 
+      # Uploaded as a directory rather than a zip we make ourselves. A
+      # self-made zip becomes a zip inside GitHub's own artifact zip, and
+      # `gh run download` refuses that with "would result in path traversal".
+      # Letting the action do the zipping means the web download is already a
+      # zip containing Prism.app at its root — exactly what Appetize wants —
+      # and `gh run download` extracts it cleanly.
       - name: Upload simulator app
         uses: actions/upload-artifact@v4
         with:
           name: Prism-simulator-app
-          path: Prism-simulator.zip
+          path: simulator/
           retention-days: 30
 
       - name: Boot simulator

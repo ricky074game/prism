@@ -12,7 +12,10 @@ set -euo pipefail
 
 DEVICE="$1"
 OUT="$2"
-BUNDLE="com.prism.client"
+# Read from the project rather than repeated here, so changing the bundle id
+# in one place doesn't silently break every screenshot into a blank screen.
+BUNDLE="$(grep -m1 'PRODUCT_BUNDLE_IDENTIFIER' project.yml | sed 's/.*: *//')"
+echo "bundle: $BUNDLE"
 
 APP=$(find build/Build/Products -name "Prism.app" -maxdepth 3 | head -1)
 echo "app: $APP"

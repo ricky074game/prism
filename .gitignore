@@ -18,3 +18,10 @@ Prism-simulator.zip
 # Downloaded artifacts
 prism-sim/
 prism-sim.zip
+
+# Signing material. Never in this repo — it is public, and a leaked private key
+# cannot be rotated when the certificate belongs to someone else's team.
+*.p12
+*.mobileprovision
+*.cer
+*.certSigningRequest

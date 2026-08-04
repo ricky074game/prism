@@ -125,6 +125,11 @@ compiler**. There is no `.xcodeproj` in the repo — it's generated from
   drift into capturing different screens, which is how an iPad regression stays
   invisible behind green phone shots.
 
+**Signing material never lives in this repo.** It's public, and a certificate
+issued to somebody else's team cannot be rotated if its private key leaks.
+`.p12`, `.mobileprovision` and `.cer` are gitignored; keep them outside the
+working tree.
+
 **Pin the run.** Artifacts keep their name across runs, so `--name` on its own
 matches every past copy and downloads them all into one directory, where they
 collide. Depending on the `gh` version that surfaces as *"file exists"* or,
@@ -228,7 +233,8 @@ app says so on the sign-in screen. Use a secondary account if that would cost
 you something.
 
 To enable the Google-account half, register an iOS OAuth client (bundle ID
-`com.prism.client`) in Google Cloud Console and put the ID in `Secrets.swift`.
+must match `PRODUCT_BUNDLE_IDENTIFIER` in `project.yml`) in Google Cloud
+Console and put the ID in `Secrets.swift`.
 The consent screen can stay in Testing mode — no verification needed. The
 YouTube sign-in works without any of that.
 

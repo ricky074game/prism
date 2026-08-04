@@ -34,7 +34,10 @@ targets:
         optional: true
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.prism.client
+        # Matches the provisioning profile's App ID. Explicit App IDs sign
+        # that one bundle id and nothing else, and this app isn't going to the
+        # App Store, so the id is the profile's to choose rather than ours.
+        PRODUCT_BUNDLE_IDENTIFIER: app.rhubarb5669.sagittarius5445
         PRODUCT_NAME: Prism
         MARKETING_VERSION: "1.0"
         CURRENT_PROJECT_VERSION: "1"
@@ -81,7 +84,7 @@ targets:
       - target: Prism
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.prism.client.tests
+        PRODUCT_BUNDLE_IDENTIFIER: app.rhubarb5669.sagittarius5445.tests
         GENERATE_INFOPLIST_FILE: "YES"
         # Tests run on the simulator and are never shipped.
         CODE_SIGNING_ALLOWED: "NO"

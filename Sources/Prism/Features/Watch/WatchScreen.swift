@@ -56,6 +56,7 @@ struct WatchScreen: View {
     @Environment(Router.self) private var router
     @Environment(PlayerEngine.self) private var player
     @Environment(Settings.self) private var settings
+    @Environment(\.prismLayout) private var layout
 
     @State private var model = WatchModel()
     @State private var glow = GlowSource()
@@ -76,27 +77,11 @@ struct WatchScreen: View {
     var body: some View {
         GeometryReader { geo in
             if isFullscreen {
-                // Fills the screen and rotates the *content* rather than asking
-                // the system for a landscape orientation. Forcing rotation is
-                // unreliable across iOS versions and fights the user if their
-                // rotation lock is on; this always works and is instant.
-                ZStack {
-                    Color.black
-                    playerPane(width: geo.size.height, height: geo.size.width)
-                        .rotationEffect(.degrees(90))
-                        .frame(width: geo.size.width, height: geo.size.height)
-                }
-                .ignoresSafeArea()
-                .statusBarHidden()
-                .transition(.opacity)
+                fullscreen(in: geo.size)
+            } else if let sidebar = layout.watchSidebar {
+                split(in: geo.size, sidebar: sidebar)
             } else {
-                VStack(spacing: 0) {
-                    playerPane(width: geo.size.width, height: geo.size.width * 9 / 16)
-                    details
-                }
-                .background(Palette.ink.ignoresSafeArea())
-                .offset(y: dragOffset)
-                .gesture(dismissGesture)
+                stacked(in: geo.size)
             }
         }
         .ignoresSafeArea(edges: .bottom)
@@ -105,6 +90,82 @@ struct WatchScreen: View {
             glow.load(video.thumbnailURL)
             await model.load(video: video, into: player, settings: settings)
         }
+    }
+
+    // MARK: Layouts
+
+    /// The phone layout: player on top, everything else scrolling beneath it.
+    private func stacked(in size: CGSize) -> some View {
+        VStack(spacing: 0) {
+            playerPane(width: size.width, height: size.width * 9 / 16)
+            ScrollView {
+                detailBlock(includingUpNext: true)
+                    .padding(.horizontal, Metrics.gutter)
+                    .padding(.top, Metrics.Space.lg)
+                    .padding(.bottom, Metrics.Space.huge * 2)
+            }
+            .scrollIndicators(.hidden)
+        }
+        .background(Palette.ink.ignoresSafeArea())
+        .offset(y: dragOffset)
+        .gesture(dismissGesture)
+    }
+
+    /// The iPad landscape layout.
+    ///
+    /// Up next moves into its own column instead of living two screens below
+    /// the video: on a 1366pt window the stacked layout leaves most of the
+    /// right-hand half empty while the list nobody can see scrolls off the
+    /// bottom.
+    private func split(in size: CGSize, sidebar: CGFloat) -> some View {
+        let main = size.width - sidebar
+        // Capped against the window height so a wide window doesn't push the
+        // title below the fold.
+        let playerHeight = min(main * 9 / 16, size.height * 0.68)
+
+        return HStack(spacing: 0) {
+            VStack(spacing: 0) {
+                playerPane(width: main, height: playerHeight)
+                ScrollView {
+                    detailBlock(includingUpNext: false)
+                        .padding(.horizontal, layout.gutter)
+                        .padding(.vertical, Metrics.Space.lg)
+                }
+                .scrollIndicators(.hidden)
+            }
+            .frame(width: main)
+
+            Rectangle()
+                .fill(Palette.line)
+                .frame(width: 0.5)
+
+            upNextColumn
+                .frame(width: sidebar)
+        }
+        .background(Palette.ink.ignoresSafeArea())
+    }
+
+    /// Fills the window.
+    ///
+    /// The content is rotated rather than the device: forcing an orientation is
+    /// unreliable across iOS versions and fights the user's rotation lock. But
+    /// that only applies when the window is portrait — rotating a window that is
+    /// *already* landscape, which is the normal case on iPad, would lay the
+    /// video on its side.
+    private func fullscreen(in size: CGSize) -> some View {
+        ZStack {
+            Color.black
+            if size.width > size.height {
+                playerPane(width: size.width, height: size.height)
+            } else {
+                playerPane(width: size.height, height: size.width)
+                    .rotationEffect(.degrees(90))
+                    .frame(width: size.width, height: size.height)
+            }
+        }
+        .ignoresSafeArea()
+        .statusBarHidden()
+        .transition(.opacity)
     }
 
     // MARK: Player
@@ -165,34 +226,49 @@ struct WatchScreen: View {
 
     // MARK: Below the fold
 
-    private var details: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: Metrics.Space.lg) {
-                header
-                actionRow
+    /// Everything below the video. `Up next` is dropped when a sidebar is
+    /// showing it instead.
+    private func detailBlock(includingUpNext: Bool) -> some View {
+        VStack(alignment: .leading, spacing: Metrics.Space.lg) {
+            header
+            actionRow
 
-                if let error = model.error {
-                    Label(error, systemImage: "exclamationmark.triangle")
-                        .font(Type.meta)
-                        .foregroundStyle(Palette.warning)
-                        .padding(Metrics.Space.md)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(Palette.warning.opacity(0.1), in: RoundedRectangle(cornerRadius: Metrics.Radius.md))
-                }
+            if let error = model.error {
+                Label(error, systemImage: "exclamationmark.triangle")
+                    .font(Type.meta)
+                    .foregroundStyle(Palette.warning)
+                    .padding(Metrics.Space.md)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Palette.warning.opacity(0.1), in: RoundedRectangle(cornerRadius: Metrics.Radius.md))
+            }
 
-                if !player.segments.isEmpty {
-                    SegmentSummary(segments: player.segments, duration: player.duration)
-                }
+            if !player.segments.isEmpty {
+                SegmentSummary(segments: player.segments, duration: player.duration)
+            }
 
+            if includingUpNext {
                 Divider().overlay(Palette.line)
-
                 upNext
             }
-            .padding(.horizontal, Metrics.gutter)
-            .padding(.top, Metrics.Space.lg)
-            .padding(.bottom, Metrics.Space.huge * 2)
+        }
+    }
+
+    private var upNextColumn: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: Metrics.Space.lg) {
+                Text("Up next")
+                    .font(Type.title(15))
+                    .foregroundStyle(Palette.textPrimary)
+
+                ForEach(model.related) { next in
+                    VideoRow(video: next) { router.open(next) }
+                }
+            }
+            .padding(.horizontal, Metrics.Space.lg)
+            .padding(.vertical, Metrics.Space.lg)
         }
         .scrollIndicators(.hidden)
+        .background(Palette.ink)
     }
 
     private var header: some View {

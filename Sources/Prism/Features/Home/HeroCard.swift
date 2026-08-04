@@ -8,6 +8,9 @@ import SwiftUI
 struct HeroCard: View {
     let video: Video
     let glow: GlowSource
+    /// Widened on iPad: at 1400pt a 16:9 card is 790 tall and fills the screen
+    /// on its own, which turns the masthead into an obstacle.
+    var aspect: CGFloat = 16 / 9
     var onTap: () -> Void
 
     @Environment(Settings.self) private var settings
@@ -35,9 +38,9 @@ struct HeroCard: View {
         // to the loaded bitmap's own ratio instead — YouTube's 4:3-padded
         // thumbnails then leave black bars inside the rounded rect.
         Color.clear
-            .aspectRatio(16 / 9, contentMode: .fit)
+            .aspectRatio(aspect, contentMode: .fit)
             .overlay {
-                RemoteImage(url: video.thumbnailURL, targetSize: CGSize(width: 800, height: 450)) {
+                RemoteImage(url: video.thumbnailURL, targetSize: CGSize(width: 1280, height: 720)) {
                     ShimmerPlaceholder()
                 }
             }

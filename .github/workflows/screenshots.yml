@@ -21,7 +21,7 @@ jobs:
   screenshots:
     name: Capture simulator screenshots
     runs-on: macos-15
-    timeout-minutes: 35
+    timeout-minutes: 45
 
     steps:
       - uses: actions/checkout@v4
@@ -73,60 +73,8 @@ jobs:
           path: simulator/
           retention-days: 30
 
-      - name: Boot simulator
-        id: sim
-        run: |
-          # Pick a concrete device rather than relying on `booted`, which only
-          # resolves when exactly one simulator is running.
-          RUNTIME=$(xcrun simctl list runtimes --json | python3 -c "
-          import json,sys
-          rs=[r for r in json.load(sys.stdin)['runtimes'] if r['isAvailable'] and 'iOS' in r['name']]
-          print(sorted(rs, key=lambda r: r['version'])[-1]['identifier'])
-          ")
-          echo "runtime=$RUNTIME"
-          UDID=$(xcrun simctl create prism-shots "iPhone 16 Pro" "$RUNTIME")
-          echo "udid=$UDID" >> "$GITHUB_OUTPUT"
-          xcrun simctl boot "$UDID"
-          xcrun simctl bootstatus "$UDID" -b
-          # Dark status bar values so the captures look deliberate.
-          xcrun simctl status_bar "$UDID" override \
-            --time "9:41" --batteryState charged --batteryLevel 100 \
-            --cellularMode active --cellularBars 4 --wifiMode active --wifiBars 3
-
-      - name: Install app
-        run: |
-          APP=$(find build/Build/Products -name "Prism.app" -maxdepth 3 | head -1)
-          echo "installing $APP"
-          xcrun simctl install "${{ steps.sim.outputs.udid }}" "$APP"
-
-      - name: Capture screens
-        run: |
-          UDID="${{ steps.sim.outputs.udid }}"
-          BUNDLE="com.prism.client"
-          mkdir -p shots
-
-          shoot () {
-            local screen="$1"; local name="$2"; local wait="${3:-6}"
-            echo "--- $name"
-            xcrun simctl terminate "$UDID" "$BUNDLE" 2>/dev/null || true
-            sleep 1
-            # Launch arguments put the app straight onto the target screen with
-            # fixture data, so each capture is one deterministic launch.
-            xcrun simctl launch "$UDID" "$BUNDLE" -prism-demo -prism-screen "$screen" || true
-            sleep "$wait"
-            xcrun simctl io "$UDID" screenshot --type=png "shots/$name.png" || true
-          }
-
-          shoot home        01-home        8
-          shoot watch       02-watch       10
-          shoot scrubber    03-scrubber    10
-          shoot shorts      04-shorts      8
-          shoot search      05-search      6
-          shoot settings    06-settings    6
-          shoot channel     07-channel     8
-
-          echo "--- captured ---"
-          ls -la shots/
+      - name: Capture iPhone
+        run: ./scripts/capture.sh "iPhone 16 Pro" shots
 
       - name: Upload screenshots
         uses: actions/upload-artifact@v4
@@ -135,8 +83,15 @@ jobs:
           path: shots/
           retention-days: 30
 
-      - name: Tear down
-        if: always()
-        run: |
-          xcrun simctl shutdown "${{ steps.sim.outputs.udid }}" || true
-          xcrun simctl delete "${{ steps.sim.outputs.udid }}" || true
+      # Prism is a universal binary, so every layout decision it makes at iPad
+      # width goes unreviewed unless something actually runs it there. The
+      # phone pass would stay green with the rail broken.
+      - name: Capture iPad
+        run: ./scripts/capture.sh "iPad Pro 13-inch (M4)" shots-ipad
+
+      - name: Upload iPad screenshots
+        uses: actions/upload-artifact@v4
+        with:
+          name: screenshots-ipad
+          path: shots-ipad/
+          retention-days: 30

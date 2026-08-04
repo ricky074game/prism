@@ -45,6 +45,7 @@ final class LibraryModel {
 
 struct LibraryScreen: View {
     @Environment(Router.self) private var router
+    @Environment(\.prismLayout) private var layout
     @State private var model = LibraryModel()
     @State private var auth = GoogleAuth.shared
     @State private var session = AccountSession.shared
@@ -68,9 +69,10 @@ struct LibraryScreen: View {
 
                 shelf("Discover", model.trending, icon: "sparkles")
 
-                Color.clear.frame(height: TabBar.height + Metrics.Space.xxl)
+                Color.clear.frame(height: layout.bottomChrome)
             }
             .padding(.top, Metrics.Space.sm)
+            .pageWidth(layout)
         }
         .scrollIndicators(.hidden)
         .background(Palette.ink)
@@ -101,7 +103,7 @@ struct LibraryScreen: View {
         }
         .padding(Metrics.Space.lg)
         .background(Palette.surface, in: RoundedRectangle(cornerRadius: Metrics.Radius.card, style: .continuous))
-        .padding(.horizontal, Metrics.gutter)
+        .padding(.horizontal, layout.gutter)
     }
 
     /// A horizontally scrolling row. Empty shelves are omitted entirely rather
@@ -113,7 +115,7 @@ struct LibraryScreen: View {
                 Label(title, systemImage: icon)
                     .font(Type.title(15))
                     .foregroundStyle(Palette.textPrimary)
-                    .padding(.horizontal, Metrics.gutter)
+                    .padding(.horizontal, layout.gutter)
 
                 ScrollView(.horizontal) {
                     HStack(spacing: Metrics.Space.md) {
@@ -121,7 +123,7 @@ struct LibraryScreen: View {
                             ShelfCard(video: video) { router.open(video) }
                         }
                     }
-                    .padding(.horizontal, Metrics.gutter)
+                    .padding(.horizontal, layout.gutter)
                 }
                 .scrollIndicators(.hidden)
             }
@@ -133,7 +135,7 @@ struct LibraryScreen: View {
             Label("Playlists", systemImage: "list.bullet.rectangle")
                 .font(Type.title(15))
                 .foregroundStyle(Palette.textPrimary)
-                .padding(.horizontal, Metrics.gutter)
+                .padding(.horizontal, layout.gutter)
 
             ScrollView(.horizontal) {
                 HStack(spacing: Metrics.Space.md) {
@@ -146,7 +148,7 @@ struct LibraryScreen: View {
                         .buttonStyle(.plain)
                     }
                 }
-                .padding(.horizontal, Metrics.gutter)
+                .padding(.horizontal, layout.gutter)
             }
             .scrollIndicators(.hidden)
         }
@@ -157,11 +159,17 @@ struct ShelfCard: View {
     let video: Video
     var onTap: () -> Void
 
+    @Environment(\.prismLayout) private var layout
+
+    /// Shelf cards grow on iPad — 196pt cards on a 1366pt row read as a
+    /// phone screenshot pasted into the middle of a desk.
+    private var cardWidth: CGFloat { layout.isWide ? 264 : 196 }
+
     var body: some View {
         Button(action: onTap) {
             VStack(alignment: .leading, spacing: Metrics.Space.sm) {
                 Color.clear
-                    .frame(width: 196, height: 110)
+                    .frame(width: cardWidth, height: cardWidth * 9 / 16)
                     .overlay {
                         RemoteImage(url: video.thumbnailURL, targetSize: CGSize(width: 400, height: 225)) {
                             ShimmerPlaceholder()
@@ -185,7 +193,7 @@ struct ShelfCard: View {
                     .foregroundStyle(Palette.textPrimary)
                     .lineLimit(2)
                     .multilineTextAlignment(.leading)
-                    .frame(width: 196, alignment: .leading)
+                    .frame(width: cardWidth, alignment: .leading)
                     .fixedSize(horizontal: false, vertical: true)
 
                 Text(video.channelName)
@@ -202,16 +210,21 @@ struct ShelfCard: View {
 struct PlaylistCard: View {
     let playlist: Playlist
 
+    @Environment(\.prismLayout) private var layout
+
+    /// Matched to `ShelfCard` so the two sit on the same rhythm.
+    private var cardWidth: CGFloat { layout.isWide ? 264 : 196 }
+
     var body: some View {
         VStack(alignment: .leading, spacing: Metrics.Space.sm) {
             ZStack {
                 RoundedRectangle(cornerRadius: Metrics.Radius.md, style: .continuous)
                     .fill(Palette.surfaceRaised)
-                    .frame(width: 196, height: 110)
+                    .frame(width: cardWidth, height: cardWidth * 9 / 16)
 
                 if let url = playlist.thumbnailURL {
                     RemoteImage(url: url, targetSize: CGSize(width: 400, height: 225)) { Color.clear }
-                        .frame(width: 196, height: 110)
+                        .frame(width: cardWidth, height: cardWidth * 9 / 16)
                         .clipShape(RoundedRectangle(cornerRadius: Metrics.Radius.md, style: .continuous))
                 }
 
@@ -225,7 +238,7 @@ struct PlaylistCard: View {
                 .foregroundStyle(Palette.textPrimary)
                 .lineLimit(2)
                 .multilineTextAlignment(.leading)
-                .frame(width: 196, alignment: .leading)
+                .frame(width: cardWidth, alignment: .leading)
 
             if !playlist.videoCountText.isEmpty {
                 Text(playlist.videoCountText)

@@ -49,6 +49,7 @@ final class HomeModel {
 
 struct HomeScreen: View {
     @Environment(Router.self) private var router
+    @Environment(\.prismLayout) private var layout
     @State private var model = HomeModel()
     @State private var glow = GlowSource()
     @State private var hasAppeared = false
@@ -57,33 +58,27 @@ struct HomeScreen: View {
         ScrollView {
             LazyVStack(spacing: Metrics.Space.xl) {
                 if let hero = model.videos.first {
-                    HeroCard(video: hero, glow: glow) { router.open(hero) }
-                        .padding(.horizontal, Metrics.gutter)
+                    HeroCard(video: hero, glow: glow, aspect: layout.heroAspect) { router.open(hero) }
+                        .padding(.horizontal, layout.gutter)
                 }
 
-                ForEach(Array(model.videos.dropFirst().enumerated()), id: \.element.id) { index, video in
-                    VideoCard(video: video, onTap: { router.open(video) },
-                              onTapChannel: { router.openChannel(id: $0, name: video.channelName) })
-                        .padding(.horizontal, Metrics.gutter)
-                        .task { await model.loadMoreIfNeeded(currentItem: video) }
-                        .opacity(hasAppeared ? 1 : 0)
-                        .offset(y: hasAppeared ? 0 : 14)
-                        .animation(
-                            Motion.standard.delay(Motion.stagger(index)),
-                            value: hasAppeared
-                        )
-                }
+                feed
 
                 if model.isLoading { loadingState }
                 if let error = model.error, model.videos.isEmpty { errorState(error) }
 
-                Color.clear.frame(height: TabBar.height + Metrics.Space.xxl)
+                Color.clear.frame(height: layout.bottomChrome)
             }
             .padding(.top, Metrics.Space.sm)
+            .pageWidth(layout)
         }
         .scrollIndicators(.hidden)
         .background(Palette.ink)
-        .safeAreaInset(edge: .top, spacing: 0) { PrismHeader() }
+        // The side rail carries the wordmark and both buttons at these widths,
+        // so showing the header too would duplicate all three.
+        .safeAreaInset(edge: .top, spacing: 0) {
+            if !layout.isWide { PrismHeader() }
+        }
         .refreshable { await model.load(refresh: true) }
         .task {
             guard model.videos.isEmpty else { return }
@@ -91,6 +86,42 @@ struct HomeScreen: View {
             glow.load(model.videos.first?.thumbnailURL)
             withAnimation { hasAppeared = true }
         }
+    }
+
+    /// One column on a phone, a grid on anything wider.
+    ///
+    /// The two branches exist rather than a single `LazyVGrid` with one column
+    /// because the phone path is the one that ships to the device most and it
+    /// stays exactly the layout that was verified there.
+    @ViewBuilder
+    private var feed: some View {
+        let rest = Array(model.videos.dropFirst().enumerated())
+
+        if layout.columns > 1 {
+            LazyVGrid(columns: layout.gridColumns, spacing: Metrics.Space.xl) {
+                ForEach(rest, id: \.element.id) { index, video in
+                    cell(index: index, video: video)
+                }
+            }
+            .padding(.horizontal, layout.gutter)
+        } else {
+            ForEach(rest, id: \.element.id) { index, video in
+                cell(index: index, video: video)
+                    .padding(.horizontal, layout.gutter)
+            }
+        }
+    }
+
+    private func cell(index: Int, video: Video) -> some View {
+        VideoCard(video: video, onTap: { router.open(video) },
+                  onTapChannel: { router.openChannel(id: $0, name: video.channelName) })
+            .task { await model.loadMoreIfNeeded(currentItem: video) }
+            .opacity(hasAppeared ? 1 : 0)
+            .offset(y: hasAppeared ? 0 : 14)
+            .animation(
+                Motion.standard.delay(Motion.stagger(index)),
+                value: hasAppeared
+            )
     }
 
     private var loadingState: some View {
@@ -111,7 +142,7 @@ struct HomeScreen: View {
                 }
             }
         }
-        .padding(.horizontal, Metrics.gutter)
+        .padding(.horizontal, layout.gutter)
     }
 
     private func errorState(_ message: String) -> some View {

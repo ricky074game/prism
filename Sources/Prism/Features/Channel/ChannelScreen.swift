@@ -12,7 +12,10 @@ final class ChannelModel {
 
     var tab: ChannelService.Tab = .videos
 
-    private var continuation: String?
+    /// Exposed so the shorts player can carry on paging from where the channel
+    /// screen left off instead of starting the creator's list again.
+    private(set) var continuation: String?
+
     private var isPaging = false
     private var loaded: Set<ChannelService.Tab> = []
 
@@ -84,7 +87,9 @@ final class ChannelModel {
         isPaging = true
         defer { isPaging = false }
 
-        if let more = try? await ChannelService.shared.more(continuation: continuation) {
+        // The tab travels with the request: a shorts page parsed as videos
+        // comes back empty and reads as "no more shorts".
+        if let more = try? await ChannelService.shared.more(continuation: continuation, tab: tab) {
             videos.append(contentsOf: more.videos)
             self.continuation = more.continuation
         }
@@ -97,8 +102,12 @@ struct ChannelScreen: View {
     var channelName: String = ""
 
     @Environment(Router.self) private var router
+    @Environment(\.prismLayout) private var layout
     @State private var model = ChannelModel()
     @State private var isShuffling = false
+    /// The short the user tapped, which is also what presents the vertical
+    /// player.
+    @State private var openedShort: ShortsEntry?
 
     var body: some View {
         ScrollView {
@@ -111,13 +120,37 @@ struct ChannelScreen: View {
                     tabStrip
                 }
             }
-            .padding(.bottom, TabBar.height + Metrics.Space.xxl)
+            .padding(.bottom, layout.bottomChrome)
+            .pageWidth(layout)
         }
         .scrollIndicators(.hidden)
         .background(Palette.ink.ignoresSafeArea())
         .navigationTitle(model.detail?.name ?? channelName)
         .navigationBarTitleDisplayMode(.inline)
-        .task { await model.load(channelID: channelID) }
+        .task {
+            // Screenshot runs land on a specific tab, so each capture is one
+            // deterministic launch rather than a launch plus a tap.
+            switch DemoData.screen {
+            case "channel-shorts": model.tab = .shorts
+            case "posts": model.tab = .posts
+            default: break
+            }
+            await model.load(channelID: channelID)
+        }
+        .fullScreenCover(item: $openedShort) { entry in
+            ShortsFeed(
+                source: .channel(
+                    id: channelID,
+                    videos: model.videos,
+                    start: entry.index,
+                    continuation: model.continuation
+                ),
+                onClose: { openedShort = nil }
+            )
+            // Modal content is a separate presentation host, so the layout is
+            // handed over explicitly rather than assumed to be inherited.
+            .environment(\.prismLayout, layout)
+        }
     }
 
     // MARK: Header
@@ -129,7 +162,7 @@ struct ChannelScreen: View {
                 Color.clear
                     .aspectRatio(6.2 / 1, contentMode: .fit)
                     .overlay {
-                        RemoteImage(url: banner, targetSize: CGSize(width: 1200, height: 200)) {
+                        RemoteImage(url: banner, targetSize: CGSize(width: 1600, height: 260)) {
                             Rectangle().fill(Palette.surfaceRaised)
                         }
                     }
@@ -137,16 +170,16 @@ struct ChannelScreen: View {
             }
 
             HStack(alignment: .center, spacing: Metrics.Space.lg) {
-                RemoteImage(url: model.detail?.avatarURL, targetSize: CGSize(width: 200, height: 200)) {
+                RemoteImage(url: model.detail?.avatarURL, targetSize: CGSize(width: 240, height: 240)) {
                     Circle().fill(Palette.surfaceRaised)
                 }
-                .frame(width: 72, height: 72)
+                .frame(width: avatarSize, height: avatarSize)
                 .clipShape(Circle())
                 .overlay(Circle().strokeBorder(Palette.line))
 
                 VStack(alignment: .leading, spacing: 3) {
                     Text(model.detail?.name ?? channelName)
-                        .font(Type.title(19))
+                        .font(Type.title(layout.isWide ? 26 : 19))
                         .foregroundStyle(Palette.textPrimary)
                         .lineLimit(1)
 
@@ -168,19 +201,22 @@ struct ChannelScreen: View {
 
                 Spacer(minLength: 0)
             }
-            .padding(.horizontal, Metrics.gutter)
+            .padding(.horizontal, layout.gutter)
 
             if let description = model.detail?.description, !description.isEmpty {
                 Text(description)
                     .font(Type.meta)
                     .foregroundStyle(Palette.textSecondary)
                     .lineLimit(2)
-                    .padding(.horizontal, Metrics.gutter)
+                    .frame(maxWidth: 760, alignment: .leading)
+                    .padding(.horizontal, layout.gutter)
             }
 
             actions
         }
     }
+
+    private var avatarSize: CGFloat { layout.isWide ? 104 : 72 }
 
     private var counts: String {
         [model.detail?.subscriberText, model.detail?.videoCountText]
@@ -214,7 +250,7 @@ struct ChannelScreen: View {
 
             Spacer(minLength: 0)
         }
-        .padding(.horizontal, Metrics.gutter)
+        .padding(.horizontal, layout.gutter)
     }
 
     /// Opens a random upload — the quickest way into a channel you don't know.
@@ -265,7 +301,7 @@ struct ChannelScreen: View {
                     .buttonStyle(.plain)
                 }
             }
-            .padding(.horizontal, Metrics.gutter)
+            .padding(.horizontal, layout.gutter)
             .padding(.vertical, Metrics.Space.sm)
         }
         .scrollIndicators(.hidden)
@@ -282,6 +318,9 @@ struct ChannelScreen: View {
             EmptyState(icon: "wifi.exclamationmark", title: "Couldn't load", message: error)
         } else {
             switch model.tab {
+            case .shorts:
+                shortsGrid
+
             case .posts:
                 if model.posts.isEmpty {
                     EmptyState(icon: "text.bubble", title: "No posts",
@@ -289,7 +328,10 @@ struct ChannelScreen: View {
                 } else {
                     ForEach(model.posts) { post in
                         CommunityPostCard(post: post) { router.open($0) }
-                            .padding(.horizontal, Metrics.gutter)
+                            // Posts are prose. Run across a 1400pt iPad they'd
+                            // be unreadable, so the column stays a column.
+                            .frame(maxWidth: 720, alignment: .leading)
+                            .padding(.horizontal, layout.gutter)
                     }
                 }
 
@@ -309,18 +351,109 @@ struct ChannelScreen: View {
                                 .lineLimit(2)
                             Spacer(minLength: 0)
                         }
-                        .padding(.horizontal, Metrics.gutter)
+                        .frame(maxWidth: 720, alignment: .leading)
+                        .padding(.horizontal, layout.gutter)
                     }
                     .buttonStyle(.plain)
                 }
 
             default:
-                ForEach(model.videos) { video in
-                    VideoRow(video: video) { router.open(video) }
-                        .padding(.horizontal, Metrics.gutter)
-                        .task { await model.loadMoreIfNeeded(at: video) }
-                }
+                uploads
             }
         }
     }
+
+    @ViewBuilder
+    private var uploads: some View {
+        if layout.columns > 1 {
+            LazyVGrid(columns: layout.gridColumns, spacing: Metrics.Space.xl) {
+                ForEach(model.videos) { video in
+                    VideoCard(video: video, onTap: { router.open(video) })
+                        .task { await model.loadMoreIfNeeded(at: video) }
+                }
+            }
+            .padding(.horizontal, layout.gutter)
+        } else {
+            ForEach(model.videos) { video in
+                VideoRow(video: video) { router.open(video) }
+                    .padding(.horizontal, layout.gutter)
+                    .task { await model.loadMoreIfNeeded(at: video) }
+            }
+        }
+    }
+
+    // MARK: Shorts
+
+    /// Posters, not rows.
+    ///
+    /// A short's thumbnail *is* the content — 9:16 tiles show what's in the
+    /// video at a glance, where a row of 16:9 crops shows the middle third of
+    /// each one and nothing else.
+    private var shortsGrid: some View {
+        LazyVGrid(columns: shortsColumns, spacing: Metrics.Space.lg) {
+            ForEach(Array(model.videos.enumerated()), id: \.element.id) { index, video in
+                Button {
+                    openedShort = ShortsEntry(id: index)
+                    Haptics.impact(.medium)
+                } label: {
+                    ShortPoster(video: video)
+                }
+                .buttonStyle(PressableStyle(isPressed: .constant(false), scale: 0.96))
+                .task { await model.loadMoreIfNeeded(at: video) }
+            }
+        }
+        .padding(.horizontal, layout.gutter)
+    }
+
+    private var shortsColumns: [GridItem] {
+        let count = layout.isWide ? max(4, min(7, Int(layout.width / 210))) : 3
+        return Array(repeating: GridItem(.flexible(), spacing: Metrics.Space.md, alignment: .top), count: count)
+    }
+}
+
+/// One tile in a channel's Shorts grid.
+struct ShortPoster: View {
+    let video: Video
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Metrics.Space.sm) {
+            Color.clear
+                .aspectRatio(9 / 16, contentMode: .fit)
+                .overlay {
+                    RemoteImage(url: video.thumbnailURL, targetSize: CGSize(width: 360, height: 640), contentMode: .fill) {
+                        ShimmerPlaceholder()
+                    }
+                }
+                .clipShape(RoundedRectangle(cornerRadius: Metrics.Radius.md, style: .continuous))
+                .overlay(alignment: .bottomLeading) {
+                    if !video.viewCountText.isEmpty {
+                        Text(video.viewCountText)
+                            .font(Type.readoutSmall)
+                            .foregroundStyle(.white)
+                            .shadow(color: .black.opacity(0.6), radius: 3)
+                            .padding(Metrics.Space.sm)
+                    }
+                }
+
+            Text(video.title)
+                .font(Type.labelSmall)
+                .foregroundStyle(Palette.textPrimary)
+                .lineLimit(2)
+                .multilineTextAlignment(.leading)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(video.title)
+    }
+}
+
+/// The grid position that was tapped.
+///
+/// A bare `Int` would be the whole payload, but `fullScreenCover(item:)` needs
+/// something `Identifiable` and conforming `Int` itself would leak that
+/// conformance into every file in the app.
+struct ShortsEntry: Identifiable, Hashable {
+    let id: Int
+    var index: Int { id }
 }

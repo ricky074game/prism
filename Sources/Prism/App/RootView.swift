@@ -12,22 +12,21 @@ struct RootView: View {
     var body: some View {
         @Bindable var router = router
 
-        ZStack(alignment: .bottom) {
-            Palette.ink.ignoresSafeArea()
+        // The whole app's layout is decided once, here, from the size the app
+        // actually has. Every screen reads it out of the environment rather
+        // than measuring for itself, so a Split View resize moves all of them
+        // together and there's one place to change a breakpoint.
+        GeometryReader { geo in
+            let layout = PrismLayout(width: geo.size.width, height: geo.size.height)
 
-            content
-
-            // The mini player docks directly above the tab bar and is the
-            // persistent handle back into whatever is playing.
-            if router.nowPlaying != nil && !router.isWatchExpanded {
-                MiniPlayerBar()
-                    .padding(.bottom, TabBar.height + Metrics.Space.xs)
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
-                    .zIndex(2)
+            Group {
+                if layout.isWide {
+                    railLayout(router: $router.tab)
+                } else {
+                    barLayout(router: $router.tab)
+                }
             }
-
-            TabBar(selection: $router.tab, tabs: visibleTabs)
-                .zIndex(3)
+            .environment(\.prismLayout, layout)
         }
         .overlay {
             if router.isWatchExpanded, let video = router.nowPlaying {
@@ -42,6 +41,50 @@ struct RootView: View {
         .fullScreenCover(isPresented: $showSearchForScreenshot) { SearchScreen() }
         .sheet(isPresented: $showSettingsForScreenshot) {
             NavigationStack { SettingsScreen() }
+        }
+    }
+
+    // MARK: Chrome
+
+    private func barLayout(router tab: Binding<Router.Tab>) -> some View {
+        ZStack(alignment: .bottom) {
+            Palette.ink.ignoresSafeArea()
+
+            content
+
+            // The mini player docks directly above the tab bar and is the
+            // persistent handle back into whatever is playing.
+            if router.nowPlaying != nil && !router.isWatchExpanded {
+                MiniPlayerBar()
+                    .padding(.bottom, TabBar.height + Metrics.Space.xs)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                    .zIndex(2)
+            }
+
+            TabBar(selection: tab, tabs: visibleTabs)
+                .zIndex(3)
+        }
+    }
+
+    private func railLayout(router tab: Binding<Router.Tab>) -> some View {
+        HStack(spacing: 0) {
+            SideRail(selection: tab, tabs: visibleTabs)
+
+            ZStack(alignment: .bottomTrailing) {
+                Palette.ink.ignoresSafeArea()
+
+                content
+
+                // Full-width across an iPad would make the mini player a
+                // letterbox strip; it stays a card in the corner instead.
+                if router.nowPlaying != nil && !router.isWatchExpanded {
+                    MiniPlayerBar()
+                        .frame(maxWidth: 460)
+                        .padding(Metrics.Space.lg)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                        .zIndex(2)
+                }
+            }
         }
     }
 

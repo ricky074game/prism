@@ -100,7 +100,7 @@ final class Router {
         case "watch", "scrubber":
             tab = .home
             if let first = DemoData.videos.first { open(first) }
-        case "channel":
+        case "channel", "channel-shorts":
             tab = .home
             paths[.home] = NavigationPath([ChannelRoute(id: "UCdemo", name: "Practical Engineering")])
         case "posts":

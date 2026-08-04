@@ -45,6 +45,7 @@ final class SubscriptionsModel {
 
 struct SubscriptionsScreen: View {
     @Environment(Router.self) private var router
+    @Environment(\.prismLayout) private var layout
     @State private var model = SubscriptionsModel()
     @State private var auth = GoogleAuth.shared
 
@@ -63,23 +64,20 @@ struct SubscriptionsScreen: View {
                         Text(error)
                             .font(Type.meta)
                             .foregroundStyle(Palette.warning)
-                            .padding(.horizontal, Metrics.gutter)
+                            .padding(.horizontal, layout.gutter)
                     }
 
-                    ForEach(model.videos) { video in
-                        VideoCard(video: video, onTap: { router.open(video) },
-                              onTapChannel: { router.openChannel(id: $0, name: video.channelName) })
-                            .padding(.horizontal, Metrics.gutter)
-                    }
+                    uploads
 
                     if model.isLoading {
                         ProgressView().tint(Palette.refract).padding(Metrics.Space.xxl)
                     }
                 }
 
-                Color.clear.frame(height: TabBar.height + Metrics.Space.xxl)
+                Color.clear.frame(height: layout.bottomChrome)
             }
             .padding(.top, Metrics.Space.sm)
+            .pageWidth(layout)
         }
         .scrollIndicators(.hidden)
         .background(Palette.ink)
@@ -88,6 +86,25 @@ struct SubscriptionsScreen: View {
         .onChange(of: auth.isSignedIn) { _, signedIn in
             if signedIn { Task { await model.load() } }
         }
+    }
+
+    @ViewBuilder
+    private var uploads: some View {
+        if layout.columns > 1 {
+            LazyVGrid(columns: layout.gridColumns, spacing: Metrics.Space.xl) {
+                ForEach(model.videos) { video in card(video) }
+            }
+            .padding(.horizontal, layout.gutter)
+        } else {
+            ForEach(model.videos) { video in
+                card(video).padding(.horizontal, layout.gutter)
+            }
+        }
+    }
+
+    private func card(_ video: Video) -> some View {
+        VideoCard(video: video, onTap: { router.open(video) },
+                  onTapChannel: { router.openChannel(id: $0, name: video.channelName) })
     }
 
     /// The channels you follow, as a horizontal strip of avatars.
@@ -111,7 +128,7 @@ struct SubscriptionsScreen: View {
                     }
                 }
             }
-            .padding(.horizontal, Metrics.gutter)
+            .padding(.horizontal, layout.gutter)
         }
         .scrollIndicators(.hidden)
     }
@@ -186,14 +203,16 @@ struct SignInPrompt: View {
 struct ScreenHeader: View {
     let title: String
 
+    @Environment(\.prismLayout) private var layout
+
     var body: some View {
         HStack {
             Text(title)
-                .font(Type.title(22))
+                .font(Type.title(layout.isWide ? 28 : 22))
                 .foregroundStyle(Palette.textPrimary)
             Spacer()
         }
-        .padding(.horizontal, Metrics.gutter)
+        .padding(.horizontal, layout.gutter)
         .padding(.vertical, Metrics.Space.md)
         .background {
             Rectangle()

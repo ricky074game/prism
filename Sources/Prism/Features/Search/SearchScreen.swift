@@ -42,7 +42,50 @@ struct SearchScreen: View {
     @State private var model = SearchModel()
     @FocusState private var focused: Bool
 
+    /// Measured here rather than inherited: this is presented as a cover, so it
+    /// owns the whole window and its own size is the authoritative one.
+    @State private var layout = PrismLayout()
+
     var body: some View {
+        GeometryReader { geo in
+            content
+                .onAppear { layout = PrismLayout(width: geo.size.width, height: geo.size.height) }
+                .onChange(of: geo.size) { _, size in
+                    layout = PrismLayout(width: size.width, height: size.height)
+                }
+                .environment(\.prismLayout, layout)
+        }
+    }
+
+    /// Rows rather than cards: search is a scanning task, and two columns of
+    /// compact rows keep more candidates on screen than one column of posters.
+    @ViewBuilder
+    private var results: some View {
+        if layout.columns > 1 {
+            LazyVGrid(
+                columns: Array(
+                    repeating: GridItem(.flexible(), spacing: layout.gutter, alignment: .top),
+                    count: min(2, layout.columns)
+                ),
+                spacing: Metrics.Space.lg
+            ) {
+                ForEach(model.results) { video in row(video) }
+            }
+        } else {
+            LazyVStack(spacing: Metrics.Space.lg) {
+                ForEach(model.results) { video in row(video) }
+            }
+        }
+    }
+
+    private func row(_ video: Video) -> some View {
+        VideoRow(video: video) {
+            router.open(video)
+            dismiss()
+        }
+    }
+
+    private var content: some View {
         NavigationStack {
             VStack(spacing: 0) {
                 searchField
@@ -56,15 +99,9 @@ struct SearchScreen: View {
                     .frame(maxHeight: .infinity)
                 } else {
                     ScrollView {
-                        LazyVStack(spacing: Metrics.Space.lg) {
-                            ForEach(model.results) { video in
-                                VideoRow(video: video) {
-                                    router.open(video)
-                                    dismiss()
-                                }
-                            }
-                        }
-                        .padding(Metrics.gutter)
+                        results
+                            .padding(layout.gutter)
+                            .pageWidth(layout)
                     }
                     .scrollIndicators(.hidden)
                 }
@@ -118,7 +155,9 @@ struct SearchScreen: View {
                 .font(Type.label)
                 .foregroundStyle(Palette.textSecondary)
         }
-        .padding(.horizontal, Metrics.gutter)
+        .frame(maxWidth: layout.maxContentWidth)
+        .frame(maxWidth: .infinity)
+        .padding(.horizontal, layout.gutter)
         .padding(.vertical, Metrics.Space.md)
     }
 }

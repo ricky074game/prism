@@ -92,9 +92,15 @@ actor ChannelService {
         return Self.parseTab(json, tab: tab)
     }
 
-    func more(continuation: String) async throws -> TabContents {
+    /// The next page of whichever tab asked for it.
+    ///
+    /// The tab has to be carried through: shorts continuations return
+    /// `shortsLockupViewModel` items, and the video parser doesn't read that
+    /// shape — parsing every page as `.videos` gives an empty second page and
+    /// looks like the channel simply ran out of shorts.
+    func more(continuation: String, tab: Tab = .videos) async throws -> TabContents {
         let json = try await client.browse(browseID: "", continuation: continuation)
-        return Self.parseTab(json, tab: .videos)
+        return Self.parseTab(json, tab: tab)
     }
 
     /// Uploads, for the shuffle button.

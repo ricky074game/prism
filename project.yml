@@ -41,7 +41,13 @@ targets:
         INFOPLIST_KEY_UIApplicationSceneManifest_Generation: "YES"
         INFOPLIST_KEY_UIUserInterfaceStyle: Dark
         INFOPLIST_KEY_UISupportedInterfaceOrientations: "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
+        # All four on iPad. Anything less makes iOS treat the app as
+        # fullscreen-only, which costs Split View and Slide Over — the layouts
+        # `PrismLayout` exists to handle.
+        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad: "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
         INFOPLIST_KEY_UIStatusBarStyle: UIStatusBarStyleLightContent
+        # 1 = iPhone, 2 = iPad. One binary, one bundle id, one signature — an
+        # iPad build is not a separate app and does not need separate signing.
         TARGETED_DEVICE_FAMILY: "1,2"
     info:
       path: Sources/Prism/Info.plist

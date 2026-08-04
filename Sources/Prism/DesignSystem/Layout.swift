@@ -18,6 +18,11 @@ struct PrismLayout: Equatable {
 
     var isLandscape: Bool { width > height }
 
+    /// What's left for content once the rail has taken its column. Measuring
+    /// columns against the full window width would consistently over-count by
+    /// most of a cell on narrower iPads.
+    var contentWidth: CGFloat { isWide ? width - SideRail.width : width }
+
     /// Feed columns.
     ///
     /// Derived from a target cell width rather than from device breakpoints, so
@@ -26,7 +31,7 @@ struct PrismLayout: Equatable {
     /// hard-coded case.
     var columns: Int {
         guard isWide else { return 1 }
-        return max(2, min(4, Int(width / 400)))
+        return max(2, min(4, Int(contentWidth / 400)))
     }
 
     /// Screen gutter. Wider on iPad, where the phone's 16pt reads as no margin

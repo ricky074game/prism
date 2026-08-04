@@ -26,21 +26,24 @@ struct RootView: View {
                     barLayout(router: $router.tab)
                 }
             }
-            .environment(\.prismLayout, layout)
-        }
-        .overlay {
-            if router.isWatchExpanded, let video = router.nowPlaying {
-                WatchScreen(video: video)
-                    .transition(.move(edge: .bottom))
-                    .zIndex(10)
+            // The watch overlay has to be inside the environment modifier, not
+            // applied to the GeometryReader around it — outside, it reads the
+            // default layout and never sees an iPad, whatever the window does.
+            .overlay {
+                if router.isWatchExpanded, let video = router.nowPlaying {
+                    WatchScreen(video: video)
+                        .transition(.move(edge: .bottom))
+                        .zIndex(10)
+                }
             }
-        }
-        .motion(Motion.hero, value: router.isWatchExpanded)
-        .motion(Motion.standard, value: router.nowPlaying?.id)
-        .task { router.applyLaunchScreen() }
-        .fullScreenCover(isPresented: $showSearchForScreenshot) { SearchScreen() }
-        .sheet(isPresented: $showSettingsForScreenshot) {
-            NavigationStack { SettingsScreen() }
+            .motion(Motion.hero, value: router.isWatchExpanded)
+            .motion(Motion.standard, value: router.nowPlaying?.id)
+            .task { router.applyLaunchScreen() }
+            .fullScreenCover(isPresented: $showSearchForScreenshot) { SearchScreen() }
+            .sheet(isPresented: $showSettingsForScreenshot) {
+                NavigationStack { SettingsScreen() }
+            }
+            .environment(\.prismLayout, layout)
         }
     }
 

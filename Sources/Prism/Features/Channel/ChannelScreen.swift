@@ -406,7 +406,7 @@ struct ChannelScreen: View {
     }
 
     private var shortsColumns: [GridItem] {
-        let count = layout.isWide ? max(4, min(7, Int(layout.width / 210))) : 3
+        let count = layout.isWide ? max(4, min(7, Int(layout.contentWidth / 210))) : 3
         return Array(repeating: GridItem(.flexible(), spacing: Metrics.Space.md, alignment: .top), count: count)
     }
 }

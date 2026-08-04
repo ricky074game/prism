@@ -98,6 +98,14 @@ jobs:
             cp "$PROFILE" "$dir/$UUID.mobileprovision"
           done
           echo "Installed provisioning profile $UUID"
+
+          # Carried to the packaging step, which is where the signing actually
+          # happens.
+          IDENTITY="$(security find-identity -v -p codesigning "$KEYCHAIN" \
+                      | awk '/\)/ {print $2; exit}')"
+          [ -n "$IDENTITY" ] || { echo "::error::No codesigning identity after import"; exit 1; }
+          echo "SIGN_IDENTITY=$IDENTITY" >> "$GITHUB_ENV"
+          echo "SIGN_PROFILE=$PROFILE" >> "$GITHUB_ENV"
           echo "SIGN_AVAILABLE=1" >> "$GITHUB_ENV"
 
       - name: Build (unsigned)
@@ -130,13 +138,41 @@ jobs:
           # An .ipa is just a zip with the app inside Payload/.
           mkdir -p Payload
           cp -R "$APP_PATH" Payload/
+
+          # Signing happens here rather than during the build. xcodebuild builds
+          # with signing off — that's what keeps the no-secrets path working —
+          # so the identity imported earlier would otherwise go unused and the
+          # artifact would ship unsigned while every step reported success.
+          if [ "${SIGN_AVAILABLE:-0}" = "1" ]; then
+            APP="Payload/$(basename "$APP_PATH")"
+            cp "$SIGN_PROFILE" "$APP/embedded.mobileprovision"
+
+            # Only the four entitlements every app needs. The profile grants
+            # dozens — HealthKit, HomeKit, NFC — because the App ID allows them,
+            # and signing an app with entitlements it doesn't use is a way to
+            # get rejected at install time.
+            security cms -D -i "$SIGN_PROFILE" > profile.plist
+            /usr/bin/python3 -c 'import plistlib; src = plistlib.load(open("profile.plist","rb"))["Entitlements"]; keep = ["application-identifier", "com.apple.developer.team-identifier", "get-task-allow", "keychain-access-groups"]; out = {k: src[k] for k in keep if k in src}; plistlib.dump(out, open("entitlements.plist","wb")); print("entitlements:", ", ".join(out))'
+
+            codesign --force --sign "$SIGN_IDENTITY" \
+                     --entitlements entitlements.plist \
+                     --timestamp=none --generate-entitlement-der "$APP"
+            codesign --verify --strict --verbose=2 "$APP"
+            echo "signed with $SIGN_IDENTITY"
+          fi
+
           zip -qry Prism.ipa Payload
           echo "--- built ---"
           ls -lh Prism.ipa
+          unzip -l Prism.ipa | grep -E "_CodeSignature|embedded.mobileprovision" || \
+            echo "note: unsigned build (no signing secrets)"
 
       - name: Upload IPA
         uses: actions/upload-artifact@v4
         with:
-          name: Prism-unsigned-ipa
+          # Not "unsigned" any more — it is signed whenever the secrets are
+          # present, and an artifact whose name contradicts its contents is a
+          # trap for whoever downloads it next.
+          name: Prism-ipa
           path: Prism.ipa
           retention-days: 30

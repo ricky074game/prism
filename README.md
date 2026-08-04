@@ -118,7 +118,8 @@ The project is authored on Linux, where Xcode can't run, so **CI is the
 compiler**. There is no `.xcodeproj` in the repo — it's generated from
 `project.yml` by XcodeGen on the runner.
 
-- **`.github/workflows/build.yml`** produces an unsigned `.ipa` artifact.
+- **`.github/workflows/build.yml`** produces the `.ipa` artifact — signed when
+  the signing secrets are present, unsigned when they aren't.
 - **`.github/workflows/screenshots.yml`** boots an iOS Simulator, runs the app
   against bundled fixture data, and captures real PNGs. It does this twice —
   iPhone and iPad — through the same `scripts/capture.sh`, so the two can't
@@ -140,7 +141,7 @@ artifact.
 # newest successful build
 RID=$(gh run list --workflow=build.yml --status=success --limit 1 \
         --json databaseId --jq '.[0].databaseId')
-gh run download "$RID" --name Prism-unsigned-ipa --dir build
+gh run download "$RID" --name Prism-ipa --dir build
 
 # newest successful screenshot run (also carries the simulator build)
 RID=$(gh run list --workflow=screenshots.yml --status=success --limit 1 \

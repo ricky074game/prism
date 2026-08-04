@@ -55,7 +55,7 @@ if [ -z "$IPA" ]; then
   TMP=$(mktemp -d)
   # Pinned to the run: artifact names repeat across runs, and --name alone
   # matches every past copy and unpacks them into each other.
-  gh run download "$RID" --name Prism-unsigned-ipa --dir "$TMP"
+  gh run download "$RID" --name Prism-ipa --dir "$TMP"
   IPA=$(find "$TMP" -name '*.ipa' | head -1)
   echo "run $RID → $IPA"
 fi

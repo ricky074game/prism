@@ -48,6 +48,26 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             build 2>&1 | xcbeautify --renderer github-actions
 
+      # The simulator build is what browser-streaming services (Appetize,
+      # BrowserStack, LambdaTest) want — they run a real Simulator in the cloud,
+      # so they need the iphonesimulator slice, not the device .ipa. It's already
+      # been built above; this just keeps it.
+      - name: Package simulator app
+        run: |
+          APP=$(find build/Build/Products -name "Prism.app" -maxdepth 3 | head -1)
+          echo "packaging $APP"
+          # Zipped from inside the directory so the archive contains Prism.app
+          # at its root, which is the layout these services expect.
+          (cd "$(dirname "$APP")" && zip -qry "$OLDPWD/Prism-simulator.zip" "Prism.app")
+          ls -lh Prism-simulator.zip
+
+      - name: Upload simulator app
+        uses: actions/upload-artifact@v4
+        with:
+          name: Prism-simulator-app
+          path: Prism-simulator.zip
+          retention-days: 30
+
       - name: Boot simulator
         id: sim
         run: |

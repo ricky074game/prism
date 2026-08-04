@@ -150,9 +150,19 @@ struct ChannelScreen: View {
                         .foregroundStyle(Palette.textPrimary)
                         .lineLimit(1)
 
-                    Text(subtitle)
+                    // The handle gets its own line: joined with the counts it
+                    // reliably overflows on long handles, and truncating hides
+                    // the video count entirely.
+                    if let handle = model.detail?.handle, !handle.isEmpty {
+                        Text(handle)
+                            .font(Type.meta)
+                            .foregroundStyle(Palette.textSecondary)
+                            .lineLimit(1)
+                    }
+
+                    Text(counts)
                         .font(Type.meta)
-                        .foregroundStyle(Palette.textSecondary)
+                        .foregroundStyle(Palette.textTertiary)
                         .lineLimit(1)
                 }
 
@@ -172,8 +182,8 @@ struct ChannelScreen: View {
         }
     }
 
-    private var subtitle: String {
-        [model.detail?.handle, model.detail?.subscriberText, model.detail?.videoCountText]
+    private var counts: String {
+        [model.detail?.subscriberText, model.detail?.videoCountText]
             .compactMap { $0 }
             .filter { !$0.isEmpty }
             .joined(separator: " · ")

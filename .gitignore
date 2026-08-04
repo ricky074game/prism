@@ -14,3 +14,7 @@ Payload/
 
 # Locally-staged simulator build
 Prism-simulator.zip
+
+# Downloaded artifacts
+prism-sim/
+prism-sim.zip

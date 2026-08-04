@@ -12,6 +12,8 @@ final class LayoutTests: XCTestCase {
     // Real point sizes, portrait unless noted.
     private let iPhone = PrismLayout(width: 393, height: 852)
     private let iPhoneLandscape = PrismLayout(width: 852, height: 393)
+    private let iPhoneMaxLandscape = PrismLayout(width: 956, height: 440)
+    private let iPadMini = PrismLayout(width: 744, height: 1133)
     private let iPadPortrait = PrismLayout(width: 1032, height: 1376)
     private let iPadLandscape = PrismLayout(width: 1376, height: 1032)
     private let slideOver = PrismLayout(width: 320, height: 1180)
@@ -28,6 +30,24 @@ final class LayoutTests: XCTestCase {
     func testIPadGetsTheRail() {
         XCTAssertTrue(iPadPortrait.isWide)
         XCTAssertTrue(iPadLandscape.isWide)
+        // The smallest iPad still has to qualify, or the rail is iPad-Pro-only.
+        XCTAssertTrue(iPadMini.isWide)
+    }
+
+    /// A landscape iPhone 16 Pro is 852pt wide — wider than an iPad mini in
+    /// portrait. A width-only threshold hands it the rail, the grid and the
+    /// up-next sidebar in a window 393pt tall. The short edge is what actually
+    /// separates the families.
+    func testLandscapePhonesAreNotIPads() {
+        XCTAssertFalse(iPhoneLandscape.isWide)
+        XCTAssertEqual(iPhoneLandscape.columns, 1)
+        XCTAssertNil(iPhoneLandscape.watchSidebar)
+
+        // The widest phone there is, in its widest orientation.
+        XCTAssertGreaterThan(iPhoneMaxLandscape.width, iPadMini.width)
+        XCTAssertFalse(iPhoneMaxLandscape.isWide)
+        XCTAssertEqual(iPhoneMaxLandscape.columns, 1)
+        XCTAssertNil(iPhoneMaxLandscape.watchSidebar)
     }
 
     /// The whole reason this keys on size rather than on `userInterfaceIdiom`:
@@ -56,9 +76,12 @@ final class LayoutTests: XCTestCase {
 
         // Never more than four, however wide the window gets.
         XCTAssertEqual(PrismLayout(width: 4000, height: 1200).columns, 4)
-        // And never fewer than two once the rail is showing, or the grid would
-        // be a single column beside a navigation rail.
-        XCTAssertEqual(PrismLayout(width: 700, height: 1000).columns, 2)
+
+        // A window with the shape for a rail but not the room for two cells
+        // gets one honest column rather than two 290pt ones.
+        let narrowWithRail = PrismLayout(width: 700, height: 1000)
+        XCTAssertTrue(narrowWithRail.isWide)
+        XCTAssertEqual(narrowWithRail.columns, 1)
     }
 
     // MARK: Watch screen

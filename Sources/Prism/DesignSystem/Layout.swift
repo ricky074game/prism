@@ -12,9 +12,14 @@ struct PrismLayout: Equatable {
     var width: CGFloat = 390
     var height: CGFloat = 844
 
-    /// The point where a side rail beats a bottom bar, and where one column of
-    /// feed cells starts looking like a stretched phone rather than a design.
-    var isWide: Bool { width >= 700 }
+    /// The point where a side rail beats a bottom bar.
+    ///
+    /// Both dimensions, not just the width. A landscape iPhone 16 Pro is 852pt
+    /// wide — wider than an iPad mini in portrait — so a width-only threshold
+    /// hands a phone the rail, the grid and the sidebar in a window 393pt tall.
+    /// What separates the two families is the *short* edge: no iPhone has more
+    /// than 440pt of it in any orientation, and no iPad has less than 744.
+    var isWide: Bool { min(width, height) >= 600 && max(width, height) >= 700 }
 
     var isLandscape: Bool { width > height }
 
@@ -29,9 +34,12 @@ struct PrismLayout: Equatable {
     /// every window size in between — Split View halves, Stage Manager, a
     /// resized window — lands somewhere sensible instead of on the nearest
     /// hard-coded case.
+    /// One column is a legitimate answer even with a rail showing: a narrow
+    /// Split View window has the shape for a rail but not the room for two
+    /// cells, and 290pt cards are worse than one honest column.
     var columns: Int {
         guard isWide else { return 1 }
-        return max(2, min(4, Int(contentWidth / 400)))
+        return max(1, min(4, Int(contentWidth / 400)))
     }
 
     /// Screen gutter. Wider on iPad, where the phone's 16pt reads as no margin
@@ -55,9 +63,13 @@ struct PrismLayout: Equatable {
     var heroAspect: CGFloat { isWide ? 2.4 : 16 / 9 }
 
     /// Width of the watch screen's "Up next" sidebar, or nil when the window is
-    /// too narrow or too tall to justify one.
+    /// the wrong shape or size for one.
+    ///
+    /// The 1000pt floor is what's left over: take a 300pt column out of
+    /// anything narrower and the video gets less room than it would have had
+    /// stacked.
     var watchSidebar: CGFloat? {
-        guard isWide, isLandscape else { return nil }
+        guard isWide, isLandscape, width >= 1000 else { return nil }
         return min(400, max(300, width * 0.28))
     }
 

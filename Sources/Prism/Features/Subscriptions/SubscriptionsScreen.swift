@@ -92,7 +92,7 @@ struct SubscriptionsScreen: View {
     private var uploads: some View {
         if layout.columns > 1 {
             LazyVGrid(columns: layout.gridColumns, spacing: Metrics.Space.xl) {
-                ForEach(model.videos) { video in card(video) }
+                ForEach(model.videos) { video in card(video, width: layout.cellWidth) }
             }
             .padding(.horizontal, layout.gutter)
         } else {
@@ -102,9 +102,11 @@ struct SubscriptionsScreen: View {
         }
     }
 
-    private func card(_ video: Video) -> some View {
-        VideoCard(video: video, onTap: { router.open(video) },
-                  onTapChannel: { router.openChannel(id: $0, name: video.channelName) })
+    private func card(_ video: Video, width: CGFloat? = nil) -> some View {
+        VideoCard(video: video,
+                  onTap: { router.open(video) },
+                  onTapChannel: { router.openChannel(id: $0, name: video.channelName) },
+                  width: width)
     }
 
     /// The channels you follow, as a horizontal strip of avatars.

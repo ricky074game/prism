@@ -23,10 +23,13 @@ struct PrismLayout: Equatable {
 
     var isLandscape: Bool { width > height }
 
-    /// What's left for content once the rail has taken its column. Measuring
-    /// columns against the full window width would consistently over-count by
-    /// most of a cell on narrower iPads.
-    var contentWidth: CGFloat { isWide ? width - SideRail.width : width }
+    /// What's left for content once the rail has taken its column and the page
+    /// cap has applied. Measuring against the full window width would
+    /// over-count by most of a cell on narrower iPads, and by everything past
+    /// the cap on very wide ones.
+    var contentWidth: CGFloat {
+        min(isWide ? width - SideRail.width : width, maxContentWidth)
+    }
 
     /// Feed columns.
     ///
@@ -46,9 +49,22 @@ struct PrismLayout: Equatable {
     /// at all.
     var gutter: CGFloat { isWide ? 28 : Metrics.gutter }
 
+    /// Width of one feed cell.
+    ///
+    /// The grid and the cells both derive their size from this one number, so
+    /// they cannot disagree. A `.flexible()` column hands the cell a width but
+    /// leaves the height proposal open, and a 16:9 box negotiating against that
+    /// inside a `LazyVGrid` settles at roughly 60% of the column while the row
+    /// still reserves the full height — a thumbnail floating in a gap. Measured
+    /// on an iPad Pro: 265pt drawn inside a 428pt column.
+    var cellWidth: CGFloat {
+        let inner = contentWidth - gutter * 2
+        return (inner - gutter * CGFloat(columns - 1)) / CGFloat(columns)
+    }
+
     var gridColumns: [GridItem] {
         Array(
-            repeating: GridItem(.flexible(), spacing: gutter, alignment: .top),
+            repeating: GridItem(.fixed(cellWidth), spacing: gutter, alignment: .top),
             count: columns
         )
     }

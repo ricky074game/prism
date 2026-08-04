@@ -74,14 +74,36 @@ final class LayoutTests: XCTestCase {
         XCTAssertEqual(iPadPortrait.columns, 2)
         XCTAssertEqual(iPadLandscape.columns, 3)
 
-        // Never more than four, however wide the window gets.
-        XCTAssertEqual(PrismLayout(width: 4000, height: 1200).columns, 4)
+        // Content is capped and centred past a point, so an enormous window
+        // stops adding columns rather than growing without limit.
+        let huge = PrismLayout(width: 4000, height: 1200)
+        XCTAssertEqual(huge.contentWidth, huge.maxContentWidth)
+        XCTAssertLessThanOrEqual(huge.columns, 4)
 
         // A window with the shape for a rail but not the room for two cells
         // gets one honest column rather than two 290pt ones.
         let narrowWithRail = PrismLayout(width: 700, height: 1000)
         XCTAssertTrue(narrowWithRail.isWide)
         XCTAssertEqual(narrowWithRail.columns, 1)
+    }
+
+    /// The grid and the cells inside it size from the same number. When they
+    /// disagreed, a 16:9 thumbnail negotiating against a `.flexible()` column
+    /// drew at 265pt inside a 428pt cell while the row still reserved the full
+    /// height — a shrunken thumbnail floating in a gap. Measured on an iPad Pro
+    /// before the fix.
+    func testCellWidthTilesTheContentAreaExactly() {
+        for layout in [iPadMini, iPadPortrait, iPadLandscape] {
+            let tiled = layout.cellWidth * CGFloat(layout.columns)
+                + layout.gutter * CGFloat(layout.columns - 1)
+                + layout.gutter * 2
+
+            XCTAssertEqual(tiled, layout.contentWidth, accuracy: 0.5,
+                           "columns must tile the content area, not overflow or leave a gap")
+            XCTAssertGreaterThan(layout.cellWidth, 0)
+        }
+
+        XCTAssertEqual(iPadPortrait.cellWidth, 428, accuracy: 0.5)
     }
 
     // MARK: Watch screen

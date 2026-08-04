@@ -368,7 +368,9 @@ struct ChannelScreen: View {
         if layout.columns > 1 {
             LazyVGrid(columns: layout.gridColumns, spacing: Metrics.Space.xl) {
                 ForEach(model.videos) { video in
-                    VideoCard(video: video, onTap: { router.open(video) })
+                    VideoCard(video: video,
+                              onTap: { router.open(video) },
+                              width: layout.cellWidth)
                         .task { await model.loadMoreIfNeeded(at: video) }
                 }
             }

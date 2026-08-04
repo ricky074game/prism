@@ -12,6 +12,10 @@ struct VideoCard: View {
     /// the video, which is right in places like search where the channel is not
     /// the point.
     var onTapChannel: ((String) -> Void)?
+    /// The cell's width, when the caller already knows it — a grid does. Left
+    /// nil the thumbnail negotiates its own size, which is right in a list and
+    /// wrong in a `LazyVGrid`; see `thumbnail`.
+    var width: CGFloat?
 
     @State private var isPressed = false
 
@@ -59,8 +63,14 @@ struct VideoCard: View {
     private var thumbnail: some View {
         // Ratio enforced by the container, so a thumbnail that isn't exactly
         // 16:9 fills the frame instead of letterboxing inside it.
-        Color.clear
-            .aspectRatio(16 / 9, contentMode: .fit)
+        //
+        // Given a width, the box is sized outright rather than asked to work
+        // one out. `Color` is greedy in both directions, so `.fit` has to
+        // resolve against whatever height the parent proposes — fine in a
+        // stack, where that's unspecified and the width wins, but inside a
+        // `LazyVGrid` it settles at about 60% of the column while the row still
+        // reserves the full height.
+        aspectBox
             .overlay {
                 RemoteImage(url: video.thumbnailURL, targetSize: Self.thumbSize) {
                     ShimmerPlaceholder()
@@ -71,6 +81,15 @@ struct VideoCard: View {
         .overlay {
             RoundedRectangle(cornerRadius: Metrics.Radius.card, style: .continuous)
                 .strokeBorder(.white.opacity(0.06))
+        }
+    }
+
+    @ViewBuilder
+    private var aspectBox: some View {
+        if let width {
+            Color.clear.frame(width: width, height: width * 9 / 16)
+        } else {
+            Color.clear.aspectRatio(16 / 9, contentMode: .fit)
         }
     }
 

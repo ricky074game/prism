@@ -100,7 +100,7 @@ struct HomeScreen: View {
         if layout.columns > 1 {
             LazyVGrid(columns: layout.gridColumns, spacing: Metrics.Space.xl) {
                 ForEach(rest, id: \.element.id) { index, video in
-                    cell(index: index, video: video)
+                    cell(index: index, video: video, width: layout.cellWidth)
                 }
             }
             .padding(.horizontal, layout.gutter)
@@ -112,9 +112,11 @@ struct HomeScreen: View {
         }
     }
 
-    private func cell(index: Int, video: Video) -> some View {
-        VideoCard(video: video, onTap: { router.open(video) },
-                  onTapChannel: { router.openChannel(id: $0, name: video.channelName) })
+    private func cell(index: Int, video: Video, width: CGFloat? = nil) -> some View {
+        VideoCard(video: video,
+                  onTap: { router.open(video) },
+                  onTapChannel: { router.openChannel(id: $0, name: video.channelName) },
+                  width: width)
             .task { await model.loadMoreIfNeeded(currentItem: video) }
             .opacity(hasAppeared ? 1 : 0)
             .offset(y: hasAppeared ? 0 : 14)

@@ -91,9 +91,22 @@ compiler**. There is no `.xcodeproj` in the repo — it's generated from
   against bundled fixture data, and captures real PNGs.
 
 ```bash
-gh run download --name Prism-unsigned-ipa   # the app
-gh run download --name screenshots          # what it looks like
+gh run download --name Prism-unsigned-ipa   --dir build     # the app
+gh run download --name Prism-simulator-app  --dir simulator # runs in a browser
+gh run download --name screenshots          --dir shots     # what it looks like
 ```
+
+**Always pass `--dir`.** Some `gh` versions (2.46 among them) refuse to extract
+into the current directory and fail with *"would result in path traversal"* —
+it has nothing to do with the artifact, and every artifact fails the same way
+without it.
+
+`Prism-simulator-app` contains `Prism.app` for the iOS Simulator. Downloaded
+from the web UI it arrives as a zip with the bundle at its root, which is what
+[Appetize](https://appetize.io) expects — useful for a look at the interface
+from a machine that can't run Xcode. Playback won't be representative there:
+YouTube throttles datacenter addresses, and the Simulator is a poor video
+decoder regardless.
 
 To install, sign the `.ipa` with your own Apple ID via
 [Sideloadly](https://sideloadly.io) or [AltStore](https://altstore.io). A free

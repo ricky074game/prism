@@ -105,7 +105,7 @@ struct ShortsFeed: View {
                         )
                     }
                 } else {
-                    pager(in: geo.size)
+                    pager(in: geo.size, chrome: chromeInset(geo.safeAreaInsets.bottom))
                 }
 
                 if let onClose {
@@ -137,7 +137,18 @@ struct ShortsFeed: View {
         .onDisappear { pool.pauseAll() }
     }
 
-    private func pager(in size: CGSize) -> some View {
+    /// How much room the overlay has to leave at the bottom.
+    ///
+    /// The feed ignores the safe area so the video can run to the edges, which
+    /// means nothing else puts the home indicator back — the title was running
+    /// underneath it and the tab bar. Presented over a channel there's no tab
+    /// bar to clear, and on iPad there isn't one anywhere.
+    private func chromeInset(_ safeBottom: CGFloat) -> CGFloat {
+        let bar = (onClose == nil && !layout.isWide) ? TabBar.height : 0
+        return bar + safeBottom + Metrics.Space.lg
+    }
+
+    private func pager(in size: CGSize, chrome: CGFloat) -> some View {
         TabView(selection: $index) {
             ForEach(Array(model.videos.enumerated()), id: \.element.id) { i, video in
                 ShortCell(
@@ -149,7 +160,8 @@ struct ShortsFeed: View {
                     // blurred backdrop own the rest.
                     contentWidth: layout.isWide
                         ? min(size.width, size.height * 9 / 16)
-                        : size.width
+                        : size.width,
+                    chrome: chrome
                 )
                 .frame(width: size.width, height: size.height)
                 .rotationEffect(.degrees(-90))
@@ -208,6 +220,8 @@ struct ShortCell: View {
     let isCurrent: Bool
     /// The width the video itself occupies. Narrower than the cell on iPad.
     var contentWidth: CGFloat?
+    /// Room to leave at the bottom for chrome the feed draws underneath.
+    var chrome: CGFloat = 0
 
     @State private var isLiked = false
 
@@ -287,7 +301,7 @@ struct ShortCell: View {
                 }
             }
             .padding(.horizontal, Metrics.gutter)
-            .padding(.bottom, TabBar.height + Metrics.Space.xl)
+            .padding(.bottom, chrome)
         }
         .background {
             LinearGradient(colors: [.clear, .black.opacity(0.55)],

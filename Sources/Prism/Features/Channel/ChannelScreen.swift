@@ -210,7 +210,10 @@ struct ChannelScreen: View {
             router.open(pick)
             return
         }
-        if let pick = try? await ChannelService.shared.randomVideo(channelID: channelID), let pick {
+        // `try?` on a method already returning an optional gives a double
+        // optional, so it's flattened rather than bound twice.
+        let fetched = try? await ChannelService.shared.randomVideo(channelID: channelID)
+        if let pick = fetched ?? nil {
             Haptics.impact(.medium)
             router.open(pick)
         }

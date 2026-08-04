@@ -167,7 +167,7 @@ actor ChannelService {
         TabContents(
             videos: tab == .shorts ? FeedParser.shorts(from: json) : FeedParser.videos(from: json),
             posts: tab == .posts ? parsePosts(json) : [],
-            playlists: tab == .playlists ? PlaylistService.shared.playlists(from: json) : [],
+            playlists: tab == .playlists ? PlaylistService.playlists(from: json) : [],
             continuation: FeedParser.continuationToken(from: json)
         )
     }

@@ -86,12 +86,16 @@ actor PlaylistService {
     }
 
     /// Playlists shown on a browse surface.
-    func playlists(from json: [String: Any]) -> [Playlist] {
+    ///
+    /// `nonisolated` because it only reads its argument — parsing needs none of
+    /// the actor's state, and requiring an await would force every caller into
+    /// an async context for no reason.
+    nonisolated static func playlists(from json: [String: Any]) -> [Playlist] {
         var found: [Playlist] = []
         var seen = Set<String>()
 
         // Current format.
-        walk(json, key: "lockupViewModel") { lockup in
+        walkStatic(json, key: "lockupViewModel") { lockup in
             guard let id = lockup["contentId"] as? String,
                   (lockup["contentType"] as? String ?? "").contains("PLAYLIST"),
                   seen.insert(id).inserted
@@ -111,7 +115,7 @@ actor PlaylistService {
         }
 
         // Older surfaces still use the renderer.
-        walk(json, key: "playlistRenderer") { r in
+        walkStatic(json, key: "playlistRenderer") { r in
             guard let id = r["playlistId"] as? String, seen.insert(id).inserted else { return }
             let title = (r["title"] as? [String: Any])?["simpleText"] as? String ?? ""
             guard !title.isEmpty else { return }
@@ -128,6 +132,21 @@ actor PlaylistService {
         }
 
         return found
+    }
+
+    /// Static twin of `walk`, for the nonisolated parser above.
+    nonisolated private static func walkStatic(_ root: Any, key: String, body: ([String: Any]) -> Void) {
+        var stack: [Any] = [root]
+        while let node = stack.popLast() {
+            switch node {
+            case let dict as [String: Any]:
+                if let hit = dict[key] as? [String: Any] { body(hit) }
+                stack.append(contentsOf: dict.values)
+            case let array as [Any]:
+                stack.append(contentsOf: array)
+            default: continue
+            }
+        }
     }
 
     private func walk(_ root: Any, key: String, body: ([String: Any]) -> Void) {

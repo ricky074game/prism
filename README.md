@@ -160,9 +160,36 @@ from a machine that can't run Xcode. Playback won't be representative there:
 YouTube throttles datacenter addresses, and the Simulator is a poor video
 decoder regardless.
 
-To install, sign the `.ipa` with your own Apple ID via
-[Sideloadly](https://sideloadly.io) or [AltStore](https://altstore.io). A free
-account expires after 7 days; a paid one lasts a year.
+### Signing
+
+Two routes, both using the same certificate.
+
+`scripts/sign.sh` signs locally, on Linux, with no Xcode and no Mac — it wraps
+[zsign](https://github.com/zhlynn/zsign). Run it bare and it pulls the newest
+successful CI build:
+
+```bash
+./scripts/sign.sh                     # → Prism-signed.ipa
+./scripts/sign.sh path/to/Prism.ipa   # or a specific one
+```
+
+It expects `~/.prism-signing/*.p12` and `*.mobileprovision` — deliberately
+outside the working tree — and checks the profile's App ID against the ipa's
+bundle id first, because an explicit App ID signs exactly one bundle id and the
+on-device failure for a mismatch tells you nothing about which two things
+disagreed.
+
+CI does the same automatically when `IOS_DIST_CERT_P12_BASE64`,
+`IOS_DIST_PROFILE_BASE64` and `IOS_CERT_PASSWORD` are set, and emits an
+unsigned ipa when they aren't.
+
+Failing both, sign with your own Apple ID via
+[Sideloadly](https://sideloadly.io) or [AltStore](https://altstore.io) — a free
+account expires after 7 days, a paid one lasts a year.
+
+A development or ad-hoc profile lists device UDIDs, so the build installs only
+on the devices it names. That limit is per *device* — not per app, and not per
+device family. Adding an iPad is the same exercise as adding a second iPhone.
 
 ## Layout
 

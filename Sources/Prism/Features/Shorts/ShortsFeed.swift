@@ -153,6 +153,13 @@ struct ShortsFeed: View {
                 )
                 .frame(width: size.width, height: size.height)
                 .rotationEffect(.degrees(-90))
+                // `rotationEffect` moves pixels, not layout. Without this the
+                // cell still *measures* portrait inside a landscape page, and
+                // the mismatch pushes every short down the screen — which is
+                // what put a black band across the top of the feed on both
+                // devices. Re-framing after the rotation makes the footprint
+                // match the page it sits in.
+                .frame(width: size.height, height: size.width)
                 .tag(i)
             }
         }
@@ -199,23 +206,36 @@ struct ShortCell: View {
 
     var body: some View {
         ZStack {
-            // A blurred copy fills the frame behind the video, so a 16:9 short
-            // shown full-height has something better than black in the letterbox
-            // bars. Only drawn once the video is up — before that the sharp
-            // thumbnail below carries the frame.
-            RemoteImage(url: video.thumbnailURL, targetSize: CGSize(width: 240, height: 135), contentMode: .fill) {
-                Color.black
-            }
-            .blur(radius: 24)
-            .overlay(Color.black.opacity(0.4))
-
-            videoSurface
-                .frame(maxWidth: contentWidth)
-
-            overlay
-                .frame(maxWidth: contentWidth)
+            backdrop
+            column
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .clipped()
+    }
+
+    /// A blurred copy behind the video, so a 16:9 short shown full-height has
+    /// something better than black in the letterbox bars.
+    ///
+    /// Pinned to the cell explicitly. `contentMode: .fill` scales the image
+    /// past the frame by design, and without a frame to clip to, the oversized
+    /// image sets the size of the stack around it instead of the other way
+    /// round.
+    private var backdrop: some View {
+        RemoteImage(url: video.thumbnailURL, targetSize: CGSize(width: 240, height: 135), contentMode: .fill) {
+            Color.black
+        }
+        .blur(radius: 24)
+        .overlay(Color.black.opacity(0.4))
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .clipped()
+    }
+
+    private var column: some View {
+        ZStack {
+            videoSurface
+            overlay
+        }
+        .frame(maxWidth: contentWidth)
     }
 
     @ViewBuilder

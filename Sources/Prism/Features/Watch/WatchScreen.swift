@@ -100,7 +100,12 @@ struct WatchScreen: View {
             playerPane(width: size.width, height: size.width * 9 / 16)
             ScrollView {
                 detailBlock(includingUpNext: true)
-                    .padding(.horizontal, Metrics.gutter)
+                    // Capped on a portrait iPad: the video is full-bleed but
+                    // an up-next row run to 1000pt is mostly empty space with
+                    // a thumbnail at one end.
+                    .frame(maxWidth: layout.isWide ? 900 : .infinity)
+                    .frame(maxWidth: .infinity)
+                    .padding(.horizontal, layout.gutter)
                     .padding(.top, Metrics.Space.lg)
                     .padding(.bottom, Metrics.Space.huge * 2)
             }

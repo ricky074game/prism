@@ -58,6 +58,9 @@ struct RootView: View {
                 // the view identity stable.
                 NavigationStack(path: router.path(for: tab)) {
                     screen(for: tab)
+                        .navigationDestination(for: ChannelRoute.self) { route in
+                            ChannelScreen(channelID: route.id, channelName: route.name)
+                        }
                 }
                 .opacity(router.tab == tab ? 1 : 0)
                 .allowsHitTesting(router.tab == tab)

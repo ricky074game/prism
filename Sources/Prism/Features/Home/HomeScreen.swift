@@ -62,7 +62,8 @@ struct HomeScreen: View {
                 }
 
                 ForEach(Array(model.videos.dropFirst().enumerated()), id: \.element.id) { index, video in
-                    VideoCard(video: video) { router.open(video) }
+                    VideoCard(video: video, onTap: { router.open(video) },
+                              onTapChannel: { router.openChannel(id: $0, name: video.channelName) })
                         .padding(.horizontal, Metrics.gutter)
                         .task { await model.loadMoreIfNeeded(currentItem: video) }
                         .opacity(hasAppeared ? 1 : 0)

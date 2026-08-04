@@ -67,7 +67,8 @@ struct SubscriptionsScreen: View {
                     }
 
                     ForEach(model.videos) { video in
-                        VideoCard(video: video) { router.open(video) }
+                        VideoCard(video: video, onTap: { router.open(video) },
+                              onTapChannel: { router.openChannel(id: $0, name: video.channelName) })
                             .padding(.horizontal, Metrics.gutter)
                     }
 

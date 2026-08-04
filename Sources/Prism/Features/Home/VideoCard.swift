@@ -8,23 +8,52 @@ import SwiftUI
 struct VideoCard: View {
     let video: Video
     var onTap: () -> Void
+    /// Set to make the avatar open the channel. Without it the whole cell opens
+    /// the video, which is right in places like search where the channel is not
+    /// the point.
+    var onTapChannel: ((String) -> Void)?
 
     @State private var isPressed = false
 
     private static let thumbSize = CGSize(width: 400, height: 225)
 
     var body: some View {
-        Button(action: onTap) {
-            VStack(alignment: .leading, spacing: Metrics.Space.md) {
-                thumbnail
-                metadata
+        // The avatar is a sibling button rather than nested inside the cell's
+        // button — a Button inside another Button's label never receives the
+        // tap, so the channel link would silently do nothing.
+        VStack(alignment: .leading, spacing: Metrics.Space.md) {
+            Button(action: onTap) {
+                thumbnail.contentShape(Rectangle())
             }
-            .contentShape(Rectangle())
+            .buttonStyle(PressableStyle(isPressed: $isPressed))
+
+            HStack(alignment: .top, spacing: Metrics.Space.md) {
+                channelButton
+                Button(action: onTap) {
+                    titleBlock.contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(.horizontal, Metrics.Space.xs)
         }
-        .buttonStyle(PressableStyle(isPressed: $isPressed))
-        .accessibilityElement(children: .combine)
+        .accessibilityElement(children: .contain)
         .accessibilityLabel("\(video.title), \(video.channelName)")
-        .accessibilityHint("Opens the video")
+    }
+
+    @ViewBuilder
+    private var channelButton: some View {
+        if let onTapChannel, !video.channelID.isEmpty {
+            Button {
+                onTapChannel(video.channelID)
+                Haptics.impact(.light)
+            } label: {
+                avatar
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Open \(video.channelName)")
+        } else {
+            avatar
+        }
     }
 
     private var thumbnail: some View {
@@ -68,27 +97,23 @@ struct VideoCard: View {
         }
     }
 
-    private var metadata: some View {
-        HStack(alignment: .top, spacing: Metrics.Space.md) {
-            avatar
+    private var titleBlock: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(video.title)
+                .font(Type.cardTitle)
+                .foregroundStyle(Palette.textPrimary)
+                .lineLimit(2)
+                .multilineTextAlignment(.leading)
+                .fixedSize(horizontal: false, vertical: true)
 
-            VStack(alignment: .leading, spacing: 3) {
-                Text(video.title)
-                    .font(Type.cardTitle)
-                    .foregroundStyle(Palette.textPrimary)
-                    .lineLimit(2)
-                    .multilineTextAlignment(.leading)
-                    .fixedSize(horizontal: false, vertical: true)
-
-                Text(subtitle)
-                    .font(Type.meta)
-                    .foregroundStyle(Palette.textSecondary)
-                    .lineLimit(1)
-            }
+            Text(subtitle)
+                .font(Type.meta)
+                .foregroundStyle(Palette.textSecondary)
+                .lineLimit(1)
 
             Spacer(minLength: 0)
         }
-        .padding(.horizontal, Metrics.Space.xs)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     @ViewBuilder

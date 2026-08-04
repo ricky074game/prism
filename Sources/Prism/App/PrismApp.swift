@@ -26,6 +26,12 @@ struct PrismApp: App {
     }
 }
 
+/// A channel destination on a navigation stack.
+struct ChannelRoute: Hashable, Sendable {
+    let id: String
+    let name: String
+}
+
 /// Navigation state.
 ///
 /// The watch screen is not a pushed destination — it's an overlay that can
@@ -69,6 +75,19 @@ final class Router {
     func open(_ video: Video) {
         nowPlaying = video
         isWatchExpanded = true
+    }
+
+    /// Pushes a channel onto the current tab's stack.
+    ///
+    /// Collapses the watch screen first — it's an overlay above the navigation
+    /// stack, so pushing underneath it would look like nothing happened.
+    func openChannel(id: String, name: String = "") {
+        guard !id.isEmpty else { return }
+        if isWatchExpanded { isWatchExpanded = false }
+
+        var path = paths[tab] ?? NavigationPath()
+        path.append(ChannelRoute(id: id, name: name))
+        paths[tab] = path
     }
 
     /// Puts the app on a given screen at launch, for screenshot runs.

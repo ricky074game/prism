@@ -2,6 +2,7 @@ import AVFoundation
 import Combine
 import MediaPlayer
 import Observation
+import UIKit
 
 /// The playback engine.
 ///
@@ -80,10 +81,60 @@ final class PlayerEngine {
 
     /// `.playback` keeps audio alive when the screen locks or the app
     /// backgrounds — the single most-requested behaviour in any video client.
+    ///
+    /// The category alone isn't enough: the session has to be **active**, and
+    /// the target needs the `audio` background mode. Miss either and audio stops
+    /// the instant the app leaves the foreground, and Picture in Picture is torn
+    /// down with it.
     private func configureSession() {
         let session = AVAudioSession.sharedInstance()
         try? session.setCategory(.playback, mode: .moviePlayback, options: [])
         try? session.setActive(true)
+        setUpRemoteCommands()
+    }
+
+    /// Lock-screen and Control Centre transport.
+    ///
+    /// Without these the Now Playing card appears but its buttons do nothing,
+    /// which is worse than not showing it at all.
+    private func setUpRemoteCommands() {
+        let centre = MPRemoteCommandCenter.shared()
+
+        centre.playCommand.addTarget { [weak self] _ in
+            self?.play()
+            return .success
+        }
+        centre.pauseCommand.addTarget { [weak self] _ in
+            self?.pause()
+            return .success
+        }
+        centre.togglePlayPauseCommand.addTarget { [weak self] _ in
+            self?.togglePlayPause()
+            return .success
+        }
+        centre.changePlaybackPositionCommand.addTarget { [weak self] event in
+            guard let event = event as? MPChangePlaybackPositionCommandEvent else { return .commandFailed }
+            self?.seek(to: event.positionTime)
+            return .success
+        }
+        centre.skipForwardCommand.preferredIntervals = [15]
+        centre.skipForwardCommand.addTarget { [weak self] _ in
+            self?.skip(by: 15)
+            return .success
+        }
+        centre.skipBackwardCommand.preferredIntervals = [15]
+        centre.skipBackwardCommand.addTarget { [weak self] _ in
+            self?.skip(by: -15)
+            return .success
+        }
+    }
+
+    /// Keeps the screen awake while a video is genuinely playing.
+    ///
+    /// Scoped to playback rather than left on: an idle timer disabled while
+    /// paused would hold the screen awake indefinitely and drain the battery.
+    func setKeepAwake(_ keepAwake: Bool) {
+        UIApplication.shared.isIdleTimerDisabled = keepAwake
     }
 
     // MARK: Loading
@@ -269,6 +320,9 @@ final class PlayerEngine {
                 guard let self else { return }
                 self.isPlaying = status == .playing
                 self.isBuffering = status == .waitingToPlayAtSpecifiedRate
+                // Tied to real playback rather than to the screen being open,
+                // so pausing lets the phone sleep normally again.
+                self.setKeepAwake(status == .playing)
             }
             .store(in: &cancellables)
     }
@@ -473,8 +527,12 @@ final class PlayerEngine {
         player.replaceCurrentItem(with: nil)
         isPlaying = false
         segments = []
+        chapters = []
+        captionOptions = []
         currentTime = 0
         duration = 0
+        setKeepAwake(false)
+        MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
     }
 
     // MARK: Now Playing

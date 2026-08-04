@@ -8,6 +8,7 @@ import SwiftUI
 struct PlayerControls: View {
     let video: Video
     @Binding var isFullscreen: Bool
+    let pip: PictureInPictureController
 
     @Environment(PlayerEngine.self) private var player
     @Environment(Router.self) private var router
@@ -146,6 +147,22 @@ struct PlayerControls: View {
                 }
                 .accessibilityLabel(player.activeCaption?.languageCode != nil
                                     ? "Turn captions off" : "Turn captions on")
+            }
+
+            // Only offered once the layer actually has video — before that the
+            // system would refuse to start and the button would look broken.
+            if pip.isPossible {
+                Button {
+                    pip.toggle()
+                    Haptics.impact(.medium)
+                } label: {
+                    Image(systemName: "pip.enter")
+                        .font(.system(size: 15, weight: .medium))
+                        .foregroundStyle(.white)
+                        .frame(width: 34, height: 34)
+                        .background(.black.opacity(0.3), in: Circle())
+                }
+                .accessibilityLabel("Picture in Picture")
             }
 
             Button { showOptions = true } label: {

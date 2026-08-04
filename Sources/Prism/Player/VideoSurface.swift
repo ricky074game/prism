@@ -10,18 +10,23 @@ import AVFoundation
 struct VideoSurface: UIViewRepresentable {
     let player: AVPlayer
     var gravity: AVLayerVideoGravity = .resizeAspect
+    /// Given the layer once it exists, so Picture in Picture can attach to the
+    /// same layer rather than starting a second player.
+    var onLayerReady: ((AVPlayerLayer) -> Void)?
 
     func makeUIView(context: Context) -> PlayerLayerView {
         let view = PlayerLayerView()
         view.playerLayer.player = player
         view.playerLayer.videoGravity = gravity
         view.backgroundColor = .black
+        onLayerReady?(view.playerLayer)
         return view
     }
 
     func updateUIView(_ view: PlayerLayerView, context: Context) {
         if view.playerLayer.player !== player {
             view.playerLayer.player = player
+            onLayerReady?(view.playerLayer)
         }
         if view.playerLayer.videoGravity != gravity {
             view.playerLayer.videoGravity = gravity

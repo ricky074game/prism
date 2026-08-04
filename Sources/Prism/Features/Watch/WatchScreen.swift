@@ -67,6 +67,7 @@ struct WatchScreen: View {
     @State private var showComments = false
     @State private var isFullscreen = false
     @State private var session = AccountSession.shared
+    @State private var pip = PictureInPictureController()
 
     /// Either sign-in enables the write actions. The YouTube sign-in now
     /// requests the Data API scope too, so in practice this is that one.
@@ -120,7 +121,9 @@ struct WatchScreen: View {
             }
             .opacity(player.hasVideo ? 0 : 1)
 
-            VideoSurface(player: player.player, gravity: .resizeAspect)
+            VideoSurface(player: player.player, gravity: .resizeAspect) { layer in
+                pip.attach(to: layer)
+            }
 
             if player.isBuffering {
                 ProgressView()
@@ -128,7 +131,7 @@ struct WatchScreen: View {
                     .tint(.white)
             }
 
-            PlayerControls(video: video, isFullscreen: $isFullscreen)
+            PlayerControls(video: video, isFullscreen: $isFullscreen, pip: pip)
         }
         .frame(width: width, height: height)
         .clipped()
@@ -199,15 +202,37 @@ struct WatchScreen: View {
                 .foregroundStyle(Palette.textPrimary)
                 .fixedSize(horizontal: false, vertical: true)
 
-            HStack(spacing: Metrics.Space.sm) {
-                Text(video.channelName)
-                    .font(Type.metaEmphasis)
-                    .foregroundStyle(Palette.textSecondary)
-                if !video.viewCountText.isEmpty {
-                    Circle().fill(Palette.textTertiary).frame(width: 3, height: 3)
-                    Text(video.viewCountText).font(Type.meta).foregroundStyle(Palette.textTertiary)
-                }
+            Button {
+                router.openChannel(id: model.source?.channelID ?? video.channelID,
+                                   name: video.channelName)
+            } label: {
+                channelLine
             }
+            .buttonStyle(.plain)
+            .disabled((model.source?.channelID ?? video.channelID).isEmpty)
+        }
+    }
+
+    private var channelLine: some View {
+        HStack(spacing: Metrics.Space.sm) {
+            Text(video.channelName)
+                .font(Type.metaEmphasis)
+                .foregroundStyle(Palette.textSecondary)
+
+            // Signals the name is a link. Omitted when there's no channel id to
+            // open, so it never promises navigation that won't happen.
+            if !(model.source?.channelID ?? video.channelID).isEmpty {
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 9, weight: .bold))
+                    .foregroundStyle(Palette.textTertiary)
+            }
+
+            if !video.viewCountText.isEmpty {
+                Circle().fill(Palette.textTertiary).frame(width: 3, height: 3)
+                Text(video.viewCountText).font(Type.meta).foregroundStyle(Palette.textTertiary)
+            }
+
+            Spacer(minLength: 0)
         }
     }
 

@@ -21,6 +21,15 @@ final class ChannelModel {
         error = nil
         defer { isLoading = false }
 
+        if DemoData.isEnabled {
+            detail = DemoData.channel
+            videos = DemoData.videos
+            posts = DemoData.posts
+            playlists = DemoData.playlists
+            loaded = Set(ChannelService.Tab.allCases)
+            return
+        }
+
         do {
             let (detail, contents) = try await ChannelService.shared.load(channelID: channelID, tab: tab)
             self.detail = detail

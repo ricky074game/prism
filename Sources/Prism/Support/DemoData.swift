@@ -54,6 +54,56 @@ enum DemoData {
                        actionType: "skip", locked: true, votes: 61),
     ]
 
+    static let channel = ChannelDetail(
+        id: "UCdemo",
+        name: "Practical Engineering",
+        handle: "@PracticalEngineering",
+        subscriberText: "4.9M subscribers",
+        videoCountText: "218 videos",
+        description: "Infrastructure, and why it sometimes falls over. New videos every other Tuesday.",
+        avatarURL: nil,
+        bannerURL: nil
+    )
+
+    static let posts: [CommunityPost] = [
+        CommunityPost(
+            id: "p1",
+            author: "Practical Engineering",
+            authorAvatarURL: nil,
+            text: "Spent the week pouring concrete in the backyard again. The neighbours have stopped asking.",
+            publishedText: "3 days ago",
+            likeText: "24K",
+            replyText: "1.1K",
+            imageURLs: [],
+            attachedVideo: nil,
+            pollChoices: []
+        ),
+        CommunityPost(
+            id: "p2",
+            author: "Practical Engineering",
+            authorAvatarURL: nil,
+            text: "Which one should I build next?",
+            publishedText: "2 weeks ago",
+            likeText: "8.7K",
+            replyText: "",
+            imageURLs: [],
+            attachedVideo: nil,
+            pollChoices: ["A scale model lock and dam", "A working arch bridge", "Something that fails on purpose"]
+        ),
+        CommunityPost(
+            id: "p3",
+            author: "Practical Engineering",
+            authorAvatarURL: nil,
+            text: "New video is up — this one took four months of testing to get right.",
+            publishedText: "1 month ago",
+            likeText: "41K",
+            replyText: "2.3K",
+            imageURLs: [],
+            attachedVideo: videos.first,
+            pollChoices: []
+        ),
+    ]
+
     static let playlists: [Playlist] = [
         Playlist(id: "PL1", title: "Things that explain themselves", author: "You",
                  thumbnailURL: nil, videoCountText: "42 videos"),

@@ -123,6 +123,7 @@ jobs:
           shoot shorts      04-shorts      8
           shoot search      05-search      6
           shoot settings    06-settings    6
+          shoot channel     07-channel     8
 
           echo "--- captured ---"
           ls -la shots/

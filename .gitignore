@@ -11,3 +11,6 @@ Payload/
 
 # Stray debug captures
 *.html
+
+# Locally-staged simulator build
+Prism-simulator.zip

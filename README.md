@@ -90,16 +90,27 @@ compiler**. There is no `.xcodeproj` in the repo — it's generated from
 - **`.github/workflows/screenshots.yml`** boots an iOS Simulator, runs the app
   against bundled fixture data, and captures real PNGs.
 
+**Pin the run.** Artifacts keep their name across runs, so `--name` on its own
+matches every past copy and downloads them all into one directory, where they
+collide. Depending on the `gh` version that surfaces as *"file exists"* or,
+confusingly, *"would result in path traversal"* — neither of which is about the
+artifact.
+
 ```bash
-gh run download --name Prism-unsigned-ipa   --dir build     # the app
-gh run download --name Prism-simulator-app  --dir simulator # runs in a browser
-gh run download --name screenshots          --dir shots     # what it looks like
+# newest successful build
+RID=$(gh run list --workflow=build.yml --status=success --limit 1 \
+        --json databaseId --jq '.[0].databaseId')
+gh run download "$RID" --name Prism-unsigned-ipa --dir build
+
+# newest successful screenshot run (also carries the simulator build)
+RID=$(gh run list --workflow=screenshots.yml --status=success --limit 1 \
+        --json databaseId --jq '.[0].databaseId')
+gh run download "$RID" --name Prism-simulator-app --dir simulator
+gh run download "$RID" --name screenshots         --dir shots
 ```
 
-**Always pass `--dir`.** Some `gh` versions (2.46 among them) refuse to extract
-into the current directory and fail with *"would result in path traversal"* —
-it has nothing to do with the artifact, and every artifact fails the same way
-without it.
+Always pass `--dir` as well; some `gh` versions refuse to extract into the
+current directory.
 
 `Prism-simulator-app` contains `Prism.app` for the iOS Simulator. Downloaded
 from the web UI it arrives as a zip with the bundle at its root, which is what

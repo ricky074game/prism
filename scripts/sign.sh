@@ -27,13 +27,25 @@ die() { echo "error: $*" >&2; exit 1; }
   then re-run with ZSIGN=/path/to/zsign, or put it on PATH.
   (Build from build/linux — there is no top-level CMakeLists.txt.)"
 
-P12=$(ls "$SIGNING_DIR"/*.p12 2>/dev/null | head -1) \
+# Prefer the re-encrypted container when it's there.
+P12=$(ls "$SIGNING_DIR"/prism-signing.p12 2>/dev/null || ls "$SIGNING_DIR"/*.p12 2>/dev/null | head -1) \
   || die "no .p12 in $SIGNING_DIR"
 PROV=$(ls "$SIGNING_DIR"/*.mobileprovision 2>/dev/null | head -1) \
   || die "no .mobileprovision in $SIGNING_DIR"
 [ -n "${P12:-}" ] && [ -n "${PROV:-}" ] || die "signing material missing from $SIGNING_DIR"
 
-PASSWORD="${PRISM_P12_PASSWORD:-1}"
+# Read from a file next to the key rather than baked in here. The container
+# was re-encrypted with a long random password because the original was a
+# single "1" — GitHub redacts every occurrence of a secret's value in its logs,
+# so a one-character secret turns "pkcs12" into "pkcs***2" and "exit 1" into
+# "exit ***", and a build failure becomes unreadable.
+if [ -n "${PRISM_P12_PASSWORD:-}" ]; then
+  PASSWORD="$PRISM_P12_PASSWORD"
+elif [ -f "$SIGNING_DIR/p12-password.txt" ]; then
+  PASSWORD="$(tr -d '\n' < "$SIGNING_DIR/p12-password.txt")"
+else
+  die "no password: set PRISM_P12_PASSWORD or write $SIGNING_DIR/p12-password.txt"
+fi
 
 IPA="${1:-}"
 if [ -z "$IPA" ]; then

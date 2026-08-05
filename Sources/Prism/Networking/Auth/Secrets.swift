@@ -4,14 +4,21 @@ import Foundation
 ///
 /// ## You probably don't need this
 ///
-/// Signing in through Settings → Account already covers the Data API. The device
-/// flow requests `https://www.googleapis.com/auth/youtube` alongside the
-/// InnerTube scopes, so one token authenticates both and subscriptions, liking
-/// and subscribing work with no Cloud project at all.
+/// Signing in through Settings → Account covers everything the app actually
+/// uses, because that data comes from InnerTube rather than the Data API.
 ///
-/// The only reason to register your own client is quota: the shared path uses
-/// the YouTube TV client's allocation. A private client gives you your own
-/// ~10,000 units a day.
+/// It is worth being precise about why, since the obvious assumption is wrong
+/// and was wrong in this file for a while. The device flow's token is issued to
+/// YouTube's own TV OAuth client, and **YouTube Data API v3 is disabled on that
+/// Google project** — every call returns HTTP 403, "has not been used in
+/// project 861556708454 before or it is disabled". It isn't a quota limit and
+/// it isn't a scope you can request; the project is Google's and you cannot
+/// enable an API on it.
+///
+/// So a Cloud client of your own buys exactly one thing: the list of channels
+/// you subscribe to, for the avatar strip. The subscription *feed*, history,
+/// liked videos and Watch Later all come from InnerTube's TV client and need
+/// none of this.
 ///
 /// If you want that:
 ///

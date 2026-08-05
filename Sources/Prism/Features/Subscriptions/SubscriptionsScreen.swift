@@ -13,30 +13,38 @@ final class SubscriptionsModel {
             videos = DemoData.videos
             return
         }
-        guard GoogleAuth.shared.isSignedIn else { return }
+        // Either sign-in will do. Gating on `GoogleAuth` alone made this screen
+        // permanently empty: that path needs a Cloud OAuth client in
+        // `Secrets.swift`, which ships blank, so `isSignedIn` is always false.
+        // Meanwhile the device flow already requests the Data API scope and
+        // `YouTubeDataAPI` already prefers its token — the screen was refusing
+        // to ask for data it could have had.
+        guard AccountSession.shared.isSignedIn || GoogleAuth.shared.isSignedIn else { return }
 
         isLoading = true
         error = nil
         defer { isLoading = false }
 
         do {
-            let (channels, _) = try await YouTubeDataAPI.shared.subscriptions()
-            self.channels = channels
+            // InnerTube's subscription feed, not the Data API.
+            //
+            // The Data API cannot work here at all: the token comes from
+            // YouTube's own TV OAuth client, and YouTube Data API v3 is
+            // *disabled* on that Google project — every call returns HTTP 403
+            // "has not been used in project 861556708454 before or it is
+            // disabled". That project isn't ours to enable. One InnerTube
+            // browse replaces a subscription list plus a request per channel,
+            // and it returns the feed already merged and ordered.
+            let page = try await FeedRepository.shared.feed(.subscriptions)
+            videos = page.videos
 
-            // Uploads for the first handful of channels, fetched concurrently.
-            // Bounded because each channel is a request and the point is a
-            // glanceable feed, not an exhaustive one.
-            let recent = await withTaskGroup(of: [Video].self) { group in
-                for channel in channels.prefix(12) {
-                    group.addTask {
-                        (try? await YouTubeDataAPI.shared.uploads(channelID: channel.id, limit: 3)) ?? []
-                    }
-                }
-                var all: [Video] = []
-                for await batch in group { all.append(contentsOf: batch) }
-                return all
+            // The Data API still owns the channel list, when it's available —
+            // it needs a Cloud client, so this is empty for most people and the
+            // avatar strip simply doesn't appear.
+            if GoogleAuth.shared.isSignedIn,
+               let (channels, _) = try? await YouTubeDataAPI.shared.subscriptions() {
+                self.channels = channels
             }
-            videos = recent
         } catch {
             self.error = (error as? LocalizedError)?.errorDescription ?? "Couldn't load your subscriptions."
         }
@@ -48,11 +56,16 @@ struct SubscriptionsScreen: View {
     @Environment(\.prismLayout) private var layout
     @State private var model = SubscriptionsModel()
     @State private var auth = GoogleAuth.shared
+    @State private var session = AccountSession.shared
+
+    /// The screen only needs *an* account, and the device flow is the one that
+    /// actually works without a Cloud project.
+    private var signedIn: Bool { session.isSignedIn || auth.isSignedIn }
 
     var body: some View {
         ScrollView {
             LazyVStack(spacing: Metrics.Space.xl) {
-                if !auth.isSignedIn && !DemoData.isEnabled {
+                if !signedIn && !DemoData.isEnabled {
                     SignInPrompt()
                         .padding(.top, Metrics.Space.huge)
                 } else {
@@ -83,8 +96,8 @@ struct SubscriptionsScreen: View {
         .background(Palette.ink)
         .safeAreaInset(edge: .top, spacing: 0) { ScreenHeader(title: "Subscriptions") }
         .task { await model.load() }
-        .onChange(of: auth.isSignedIn) { _, signedIn in
-            if signedIn { Task { await model.load() } }
+        .onChange(of: signedIn) { _, now in
+            if now { Task { await model.load() } }
         }
     }
 

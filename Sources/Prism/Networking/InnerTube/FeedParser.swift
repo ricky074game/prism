@@ -34,6 +34,12 @@ enum FeedParser {
         harvest(json, key: "lockupViewModel") { r in
             if let v = lockup(from: r), seen.insert(v.id).inserted { found.append(v) }
         }
+        // The TV client's shape, which is what the signed-in surfaces return.
+        // It shares nothing with the others: no `videoId` field at all, and the
+        // title lives under `metadata.tileMetadataRenderer`.
+        harvest(json, key: "tileRenderer") { r in
+            if let v = tile(from: r), seen.insert(v.id).inserted { found.append(v) }
+        }
         // Home-feed items wrap a videoRenderer one level down.
         harvest(json, key: "richItemRenderer") { r in
             guard let inner = r["content"] as? [String: Any] else { return }
@@ -65,6 +71,85 @@ enum FeedParser {
             if let v = video(from: r, isShort: true), seen.insert(v.id).inserted { found.append(v) }
         }
         return found
+    }
+
+    /// `tileRenderer` → `Video`. The TV client's cell.
+    ///
+    /// Nothing here lines up with the other renderers. The video id is often
+    /// absent as a field entirely and has to be read out of the thumbnail URL —
+    /// `i.ytimg.com/vi/<id>/…` — which is reliable precisely because the
+    /// thumbnail is the one thing every tile has.
+    private static func tile(from r: [String: Any]) -> Video? {
+        let metadata = (r["metadata"] as? [String: Any])?["tileMetadataRenderer"] as? [String: Any]
+        guard let title = (metadata?["title"] as? [String: Any])?["simpleText"] as? String
+                ?? text(metadata?["title"]),
+              !title.isEmpty
+        else { return nil }
+
+        let id = deepString(r, key: "videoId") ?? thumbnailVideoID(r)
+        guard let id, id.count == 11 else { return nil }
+
+        // The metadata lines are free-form: channel, views and age in some
+        // order, sometimes fewer. Classified by shape, as elsewhere.
+        var channel = "", views = "", age = ""
+        var lineTexts: [String] = []
+        harvest(metadata ?? [:], key: "lineItemRenderer") { item in
+            if let t = text(item["text"]) ?? (item["text"] as? [String: Any])?["simpleText"] as? String {
+                lineTexts.append(t)
+            }
+        }
+        for part in lineTexts {
+            // The lines carry "•" separators as items of their own, and the
+            // tree walk doesn't preserve order — without this the bullet can
+            // win the race to be read as the channel name.
+            let trimmed = part.trimmingCharacters(in: .whitespaces)
+            guard trimmed.count > 2 else { continue }
+
+            if trimmed.localizedCaseInsensitiveContains("view") { views = trimmed }
+            else if trimmed.localizedCaseInsensitiveContains("ago") { age = trimmed }
+            else if channel.isEmpty { channel = trimmed }
+        }
+
+        var duration: Double = 0
+        harvest(r, key: "thumbnailOverlayTimeStatusRenderer") { overlay in
+            guard duration == 0, let t = text(overlay["text"]) else { return }
+            duration = parseDuration(t)
+        }
+
+        return Video(
+            id: id,
+            title: title,
+            channelName: channel,
+            channelID: "",
+            channelThumbnailURL: nil,
+            thumbnailURL: Video.thumbnail(id),
+            duration: duration,
+            viewCountText: views,
+            publishedText: age,
+            isLive: false,
+            isShort: false
+        )
+    }
+
+    /// `https://i.ytimg.com/vi/<id>/hqdefault.jpg` → `<id>`.
+    private static func thumbnailVideoID(_ root: Any) -> String? {
+        var stack: [Any] = [root]
+        while let node = stack.popLast() {
+            if let dict = node as? [String: Any] {
+                if let url = dict["url"] as? String,
+                   let range = url.range(of: "/vi/") {
+                    let rest = url[range.upperBound...]
+                    if let slash = rest.firstIndex(of: "/") {
+                        let id = String(rest[..<slash])
+                        if id.count == 11 { return id }
+                    }
+                }
+                stack.append(contentsOf: dict.values)
+            } else if let array = node as? [Any] {
+                stack.append(contentsOf: array)
+            }
+        }
+        return nil
     }
 
     /// `shortsLockupViewModel` → `Video`.

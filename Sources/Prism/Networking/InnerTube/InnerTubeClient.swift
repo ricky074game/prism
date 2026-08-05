@@ -67,6 +67,28 @@ struct InnerTubeClientProfile: Sendable {
         extraContext: [:]
     )
 
+    /// The only client that accepts our account token, and therefore the only
+    /// route to the signed-in user's own data.
+    ///
+    /// The token comes from YouTube's TV OAuth client, and InnerTube checks the
+    /// token against the client the request claims to be. Sent with any other
+    /// client it isn't ignored — the whole request fails with HTTP 400
+    /// "Request contains an invalid argument". Verified against live responses:
+    /// an identical `browse` returns 200 without the header and 400 with it, on
+    /// WEB, VISIONOS and ANDROID_VR alike.
+    ///
+    /// So this profile exists to be the *only* one the token is attached to.
+    /// See `isAccountClient`.
+    static let tv = InnerTubeClientProfile(
+        name: "TVHTML5",
+        version: "7.20250101.15.00",
+        userAgent: "Mozilla/5.0 (ChromiumStylePlatform) Cobalt/Version",
+        extraContext: [:]
+    )
+
+    /// Whether an account token may ride along with this client.
+    var isAccountClient: Bool { name == "TVHTML5" }
+
     func context(hl: String, gl: String) -> [String: Any] {
         var client: [String: Any] = [
             "clientName": name,
@@ -147,11 +169,17 @@ actor InnerTubeClient {
             req.setValue(visitorData, forHTTPHeaderField: "X-Goog-Visitor-Id")
         }
 
-        // Sign as the user when they've signed in. This is what lifts the age
-        // gate and makes history, Watch Later and a personalised home feed
-        // return the user's own data instead of empty or generic results.
-        for (field, value) in await AccountSession.shared.authHeaders() {
-            req.setValue(value, forHTTPHeaderField: field)
+        // Sign as the user — but only on the client whose token this is.
+        //
+        // Attaching it everywhere is worse than useless: InnerTube rejects the
+        // *whole request* with HTTP 400 when the token doesn't match the client
+        // context, so signing in used to break playback, the feed and the
+        // library all at once, and every failure was swallowed by a `try?` and
+        // shown as "empty".
+        if profile.isAccountClient {
+            for (field, value) in await AccountSession.shared.authHeaders() {
+                req.setValue(value, forHTTPHeaderField: field)
+            }
         }
         req.httpShouldHandleCookies = true
 
@@ -311,6 +339,22 @@ actor InnerTubeClient {
             if let params { body["params"] = params }
         }
         return try await post("browse", body: body, profile: .web)
+    }
+
+    /// A browse for the signed-in user's own data.
+    ///
+    /// Goes through the TV client because that's the only one the account token
+    /// is valid for. Signed out it's a normal anonymous browse, so callers
+    /// don't need to branch — they just get an empty result, which is the
+    /// truth.
+    func accountBrowse(browseID: String, continuation: String? = nil) async throws -> [String: Any] {
+        var body: [String: Any] = [:]
+        if let continuation {
+            body["continuation"] = continuation
+        } else {
+            body["browseId"] = browseID
+        }
+        return try await post("browse", body: body, profile: .tv)
     }
 
     /// Related videos and the up-next queue for the watch screen.

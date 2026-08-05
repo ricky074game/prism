@@ -42,8 +42,19 @@ actor PlaylistService {
             ? playlistID
             : "VL" + playlistID
 
-        let json = try await client.browse(browseID: browseID)
+        // The user's own playlists only exist for the signed-in account, and
+        // the account token is only valid on the TV client — a WEB browse for
+        // these comes back empty however signed in you are.
+        let json = Self.isPersonal(browseID)
+            ? try await client.accountBrowse(browseID: browseID)
+            : try await client.browse(browseID: browseID)
         return parse(json)
+    }
+
+    /// Liked (`LL`), Watch Later (`WL`) and history belong to an account;
+    /// everything else is a public playlist anyone can read.
+    nonisolated static func isPersonal(_ browseID: String) -> Bool {
+        ["VLLL", "VLWL", "FEhistory", "FEsubscriptions"].contains(browseID)
     }
 
     func more(continuation: String) async throws -> Contents {

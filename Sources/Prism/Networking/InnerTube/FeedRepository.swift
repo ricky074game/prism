@@ -44,7 +44,12 @@ actor FeedRepository {
             return Page(videos: hit.videos, continuation: hit.continuation)
         }
 
-        let json = try await client.browse(browseID: surface.rawValue)
+        // Subscriptions and history are the account's, so they go through the
+        // client the account token is valid for. Home stays on WEB: it works
+        // signed out, and the personalised version isn't worth losing that.
+        let json = PlaylistService.isPersonal(surface.rawValue)
+            ? try await client.accountBrowse(browseID: surface.rawValue)
+            : try await client.browse(browseID: surface.rawValue)
         var videos = FeedParser.videos(from: json)
         var token = FeedParser.continuationToken(from: json)
 
@@ -92,7 +97,11 @@ actor FeedRepository {
     }
 
     func more(_ surface: Surface, continuation: String) async throws -> Page {
-        let json = try await client.browse(browseID: surface.rawValue, continuation: continuation)
+        // Page two of an account surface has to keep the account client, or it
+        // fails exactly the way page one used to.
+        let json = PlaylistService.isPersonal(surface.rawValue)
+            ? try await client.accountBrowse(browseID: surface.rawValue, continuation: continuation)
+            : try await client.browse(browseID: surface.rawValue, continuation: continuation)
         let videos = FeedParser.videos(from: json)
         let token = FeedParser.continuationToken(from: json)
 

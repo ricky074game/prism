@@ -112,7 +112,7 @@ struct AccountScreen: View {
     private var googleAccount: some View {
         section(
             "SEPARATE API CLIENT",
-            note: "Optional. The sign-in above already covers the Data API by sharing the YouTube TV client's quota. Register your own OAuth client only if you'd rather have a private quota."
+            note: "Optional, and only for the subscription avatar strip. The sign-in above cannot reach the Data API — it is switched off on Google's own TV client project — so everything else comes from InnerTube instead and works without this."
         ) {
             if auth.isSignedIn {
                 statusRow(

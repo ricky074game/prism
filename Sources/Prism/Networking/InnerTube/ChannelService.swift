@@ -118,7 +118,7 @@ actor ChannelService {
         var found: [Channel] = []
         var seen = Set<String>()
 
-        walk(json, key: "tileRenderer") { tile in
+        Self.walk(json, key: "tileRenderer") { tile in
             guard let id = FeedParser.channelBrowseID(tile), seen.insert(id).inserted else { return }
 
             let metadata = (tile["metadata"] as? [String: Any])?["tileMetadataRenderer"] as? [String: Any]
@@ -128,7 +128,7 @@ actor ChannelService {
 
             // The lines are a handle and a subscriber count, in no fixed order.
             var handle: String?, subscribers: String?
-            walk(metadata ?? [:], key: "lineItemRenderer") { item in
+            Self.walk(metadata ?? [:], key: "lineItemRenderer") { item in
                 guard let text = (item["text"] as? [String: Any])?["simpleText"] as? String else { return }
                 if text.hasPrefix("@") { handle = text }
                 else if text.localizedCaseInsensitiveContains("subscriber") { subscribers = text }
@@ -138,7 +138,7 @@ actor ChannelService {
                 id: id,
                 name: name,
                 handle: handle,
-                thumbnailURL: firstImageURL(tile["header"]),
+                thumbnailURL: Self.firstImageURL(tile["header"]),
                 subscriberText: subscribers
             ))
         }

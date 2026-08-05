@@ -30,30 +30,43 @@ enum DeepLink {
     ///     youtube.com/live/ID    youtube.com/v/ID
     static func parse(_ url: URL) -> DeepLink? {
         let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
-        let host = (components?.host ?? "").lowercased()
-        let path = components?.path ?? ""
-        let segments = path.split(separator: "/").map(String.init)
 
-        // Only YouTube's hosts and Prism's own scheme. Any site can put `?v=`
-        // in a URL, and opening those as videos would be trusting a stranger's
-        // query string.
-        let isYouTube = host == "youtu.be"
-            || host == "youtube.com"
-            || host.hasSuffix(".youtube.com")
-        guard isYouTube || url.scheme == "prism" else { return nil }
+        // The host is established *before* anything is read out of the URL.
+        // Checking `?v=` first is the tempting order — it's the canonical form —
+        // and it quietly accepts `https://example.com/watch?v=…`, which is a
+        // stranger's query string deciding what this app opens.
+        let segments: [String]
+        if url.scheme == "prism" {
+            // Read from the raw string rather than `host` and `path`. A URL's
+            // host is *case-insensitive* and gets lowercased on parsing, while
+            // video ids are case-sensitive — so `prism://dQw4w9WgXcQ` came back
+            // as `dqw4w9wgxcq`, an id for a different video or for none.
+            let body = url.absoluteString.dropFirst("prism://".count)
+            segments = body.split(separator: "?")
+                .first
+                .map { $0.split(separator: "/").map(String.init) } ?? []
+        } else {
+            // Only YouTube's hosts. Any site can put `?v=` in a URL, and
+            // opening those would be trusting a stranger's query string.
+            let host = (components?.host ?? "").lowercased()
+            guard host == "youtu.be" || host == "youtube.com" || host.hasSuffix(".youtube.com")
+            else { return nil }
 
-        // ?v= wins wherever it appears — it's the canonical form.
+            // youtu.be puts the id straight after the host.
+            let path = (components?.path ?? "").split(separator: "/").map(String.init)
+            if host == "youtu.be", let id = path.first, isVideoID(id) { return .video(id) }
+            segments = path
+        }
+
+        // `?v=` is canonical, and by here the source is known to be trusted.
         if let v = components?.queryItems?.first(where: { $0.name == "v" })?.value,
            isVideoID(v) {
             return .video(v)
         }
 
-        // youtu.be/<id>, and prism://<id> where the id lands in the host.
-        if host == "youtu.be", let id = segments.first, isVideoID(id) {
-            return .video(id)
-        }
-        if url.scheme == "prism", isVideoID(host) {
-            return .video(host)
+        // prism://<id>
+        if url.scheme == "prism", segments.count == 1, isVideoID(segments[0]) {
+            return .video(segments[0])
         }
 
         // /shorts/<id>, /embed/<id>, /live/<id>, /v/<id>, /watch/<id>
@@ -63,8 +76,8 @@ enum DeepLink {
             return .video(segments[1])
         }
 
-        // Channels: /channel/UC…, and prism://channel/UC…
-        if let index = segments.firstIndex(of: "channel"),
+        // /channel/UC…
+        if let index = segments.firstIndex(where: { $0.lowercased() == "channel" }),
            segments.count > index + 1,
            segments[index + 1].hasPrefix("UC") {
             return .channel(segments[index + 1])

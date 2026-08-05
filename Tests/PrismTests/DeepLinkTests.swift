@@ -36,6 +36,16 @@ final class DeepLinkTests: XCTestCase {
         XCTAssertEqual(video("prism://watch?v=\(id)"), id)
     }
 
+    /// Video ids are case-sensitive and a URL's *host* is not — it's lowercased
+    /// on parsing. Reading `prism://dQw4w9WgXcQ` out of the host therefore
+    /// yielded `dqw4w9wgxcq`: a different video, or none at all.
+    func testCaseSurvivesThePrismScheme() {
+        for id in ["dQw4w9WgXcQ", "ABCDEFGHIJK", "abcdefghijk", "aB-dE_gHiJ0"] {
+            XCTAssertEqual(video("prism://\(id)"), id)
+            XCTAssertEqual(video("prism://watch?v=\(id)"), id)
+        }
+    }
+
     func testChannelLinks() {
         let channel = "UCMOqf8ab-42UUQIdVoKwjlQ"
         for url in ["https://www.youtube.com/channel/\(channel)", "prism://channel/\(channel)"] {

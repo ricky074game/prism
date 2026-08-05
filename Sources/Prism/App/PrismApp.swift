@@ -5,6 +5,11 @@ struct PrismApp: App {
     @State private var router = Router()
     @State private var player = PlayerEngine()
     @State private var settings = Settings()
+    /// Owned here, not by the watch screen. Collapsing to the mini player
+    /// destroys that screen, and with it the controller and the layer PiP is
+    /// attached to — which is why swiping down used to end any chance of
+    /// Picture in Picture.
+    @State private var pip = PictureInPictureController()
 
     init() {
         FontLoader.register()
@@ -20,6 +25,7 @@ struct PrismApp: App {
                 .environment(router)
                 .environment(player)
                 .environment(settings)
+                .environment(pip)
                 .preferredColorScheme(.dark)
                 .tint(Palette.refract)
         }

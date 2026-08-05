@@ -9,14 +9,24 @@ import SwiftUI
 struct MiniPlayerBar: View {
     @Environment(Router.self) private var router
     @Environment(PlayerEngine.self) private var player
+    @Environment(PictureInPictureController.self) private var pip
 
     @State private var dragOffset: CGFloat = 0
 
     var body: some View {
         if let video = router.nowPlaying {
             HStack(spacing: Metrics.Space.md) {
-                RemoteImage(url: video.thumbnailURL, targetSize: CGSize(width: 160, height: 90)) {
+                // A live layer, not a still. Two reasons: it shows what's
+                // actually playing, and Picture in Picture needs an
+                // `AVPlayerLayer` to exist. Collapsing the watch screen
+                // destroys its layer, so without one here PiP could never
+                // start once the video was in the mini player — which is most
+                // of the time somebody wants it.
+                ZStack {
                     Rectangle().fill(Palette.surfaceRaised)
+                    VideoSurface(player: player.player, gravity: .resizeAspectFill) { layer in
+                        pip.attach(to: layer)
+                    }
                 }
                 .frame(width: 62, height: 35)
                 .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))

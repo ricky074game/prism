@@ -38,16 +38,24 @@ actor FeedRepository {
     }
 
     func feed(_ surface: Surface, refresh: Bool = false) async throws -> Page {
-        let key = surface.rawValue
+        let signedIn = await AccountSession.shared.isSignedIn
+        // Signing in changes what these surfaces return, so it has to change
+        // the cache key too — otherwise the anonymous feed is served for the
+        // rest of the TTL and signing in appears to do nothing.
+        let key = surface.rawValue + (signedIn ? "|account" : "")
 
         if !refresh, let hit = cache[key], Date().timeIntervalSince(hit.fetched) < ttl {
             return Page(videos: hit.videos, continuation: hit.continuation)
         }
 
-        // Subscriptions and history are the account's, so they go through the
-        // client the account token is valid for. Home stays on WEB: it works
-        // signed out, and the personalised version isn't worth losing that.
-        let json = PlaylistService.isPersonal(surface.rawValue)
+        // Account surfaces always go through the client the token is valid for.
+        // Home joins them once there's an account: anonymously `FEwhat_to_watch`
+        // returns nothing at all, so a signed-in user was falling through to the
+        // generic discovery feed and seeing recommendations belonging to nobody.
+        let useAccount = PlaylistService.isPersonal(surface.rawValue)
+            || (surface == .home && signedIn)
+
+        let json = useAccount
             ? try await client.accountBrowse(browseID: surface.rawValue)
             : try await client.browse(browseID: surface.rawValue)
         var videos = FeedParser.videos(from: json)
@@ -55,7 +63,8 @@ actor FeedRepository {
 
         // Signed out, home comes back with no items at all — YouTube has no
         // history to build recommendations from. Falling back keeps the app
-        // from opening on a blank screen.
+        // from opening on a blank screen. Signed in and still empty means
+        // something failed, and the fallback is better than a void.
         if videos.isEmpty, surface == .home {
             videos = try await discoveryFeed()
             token = nil
@@ -99,16 +108,22 @@ actor FeedRepository {
     func more(_ surface: Surface, continuation: String) async throws -> Page {
         // Page two of an account surface has to keep the account client, or it
         // fails exactly the way page one used to.
-        let json = PlaylistService.isPersonal(surface.rawValue)
+        let signedIn = await AccountSession.shared.isSignedIn
+        let onAccount = PlaylistService.isPersonal(surface.rawValue)
+            || (surface == .home && signedIn)
+        let json = onAccount
             ? try await client.accountBrowse(browseID: surface.rawValue, continuation: continuation)
             : try await client.browse(browseID: surface.rawValue, continuation: continuation)
         let videos = FeedParser.videos(from: json)
         let token = FeedParser.continuationToken(from: json)
 
-        if var hit = cache[surface.rawValue] {
+        // The same key `feed` wrote under — it varies by sign-in — or the
+        // appended page lands in a cache entry nobody reads.
+        let key = surface.rawValue + (signedIn ? "|account" : "")
+        if var hit = cache[key] {
             hit.videos.append(contentsOf: videos)
             hit.continuation = token
-            cache[surface.rawValue] = hit
+            cache[key] = hit
         }
         return Page(videos: videos, continuation: token)
     }
@@ -126,6 +141,15 @@ actor FeedRepository {
     /// Search is the primary source rather than the home shelf: signed out,
     /// home has no shelves at all, so the shelf-first order returned nothing.
     func shorts(refresh: Bool = false) async throws -> Page {
+        // Signed in, the account's own home carries a reel shelf worth more
+        // than a keyword search — these are shorts picked for this viewer
+        // rather than whatever "#shorts" happens to return.
+        if await AccountSession.shared.isSignedIn,
+           let home = try? await client.accountBrowse(browseID: Surface.home.rawValue) {
+            let mine = FeedParser.shorts(from: home)
+            if !mine.isEmpty { return Page(videos: mine, continuation: nil) }
+        }
+
         let json = try await client.search("#shorts")
         var found = FeedParser.shorts(from: json)
 

@@ -13,6 +13,14 @@ final class WatchModel {
     private(set) var isSubscribed: Bool?
 
     func load(video: Video, into player: PlayerEngine, settings: Settings) async {
+        // Reopening from the mini player runs `.task` again. Without this the
+        // same video is loaded a second time and playback restarts from zero,
+        // so collapsing and reopening silently threw away your position.
+        if player.source?.videoID == video.id, source != nil {
+            isLoading = false
+            return
+        }
+
         isLoading = true
         error = nil
 
@@ -76,7 +84,7 @@ struct WatchScreen: View {
     @State private var showComments = false
     @State private var isFullscreen = false
     @State private var session = AccountSession.shared
-    @State private var pip = PictureInPictureController()
+    @Environment(PictureInPictureController.self) private var pip
 
     private var isSignedIn: Bool { session.isSignedIn }
 

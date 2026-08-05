@@ -58,7 +58,9 @@ final class PlayerEngine {
 
     let player = AVPlayer()
 
-    private var source: PlaybackSource?
+    /// Readable so the watch screen can tell "already playing this" from
+    /// "needs loading" — reloading restarts playback at zero.
+    private(set) var source: PlaybackSource?
     private var timeObserver: Any?
     private var cancellables = Set<AnyCancellable>()
     private var upgradeTask: Task<Void, Never>?

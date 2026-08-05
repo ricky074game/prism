@@ -120,7 +120,7 @@ enum FeedParser {
             id: id,
             title: title,
             channelName: channel,
-            channelID: "",
+            channelID: channelBrowseID(r) ?? "",
             channelThumbnailURL: nil,
             thumbnailURL: Video.thumbnail(id),
             duration: duration,
@@ -129,6 +129,28 @@ enum FeedParser {
             isLive: false,
             isShort: false
         )
+    }
+
+    /// The `UC…` a renderer points at, from any `browseEndpoint` inside it.
+    ///
+    /// Worth having on tiles specifically: it's what lets the subscription
+    /// strip mark which channels have posted recently, since the channel list
+    /// itself carries no such flag.
+    static func channelBrowseID(_ root: Any) -> String? {
+        var stack: [Any] = [root]
+        while let node = stack.popLast() {
+            if let dict = node as? [String: Any] {
+                if let browse = dict["browseEndpoint"] as? [String: Any],
+                   let id = browse["browseId"] as? String,
+                   id.hasPrefix("UC") {
+                    return id
+                }
+                stack.append(contentsOf: dict.values)
+            } else if let array = node as? [Any] {
+                stack.append(contentsOf: array)
+            }
+        }
+        return nil
     }
 
     /// `https://i.ytimg.com/vi/<id>/hqdefault.jpg` → `<id>`.

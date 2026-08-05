@@ -28,6 +28,9 @@ struct PrismApp: App {
                 .environment(pip)
                 .preferredColorScheme(.dark)
                 .tint(Palette.refract)
+                .onOpenURL { url in
+                    if let link = DeepLink.parse(url) { router.handle(link) }
+                }
         }
     }
 }
@@ -81,6 +84,34 @@ final class Router {
     func open(_ video: Video) {
         nowPlaying = video
         isWatchExpanded = true
+    }
+
+    /// Opens a video known only by id, which is all a link carries.
+    ///
+    /// The placeholder is filled in by the watch screen as soon as the player
+    /// response lands, so the title appears a moment later rather than the
+    /// whole screen waiting on a metadata round-trip first.
+    func open(videoID: String) {
+        open(Video(
+            id: videoID,
+            title: "",
+            channelName: "",
+            channelID: "",
+            channelThumbnailURL: nil,
+            thumbnailURL: Video.thumbnail(videoID),
+            duration: 0,
+            viewCountText: "",
+            publishedText: "",
+            isLive: false,
+            isShort: false
+        ))
+    }
+
+    func handle(_ link: DeepLink) {
+        switch link {
+        case .video(let id): open(videoID: id)
+        case .channel(let id): openChannel(id: id)
+        }
     }
 
     /// Pushes a channel onto the current tab's stack.

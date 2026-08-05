@@ -74,6 +74,15 @@ targets:
         NSAppTransportSecurity:
           NSAllowsArbitraryLoads: true
         UIViewControllerBasedStatusBarAppearance: false
+        # Prism's own scheme. `https://youtube.com` links cannot be claimed —
+        # that needs an apple-app-site-association file served by youtube.com,
+        # which only Google can publish — so this is the half that's actually
+        # ours: prism://<id>, prism://watch?v=<id>, prism://channel/<UC…>.
+        # A Shortcut can rewrite a YouTube URL into one of these, which is how
+        # the share sheet ends up opening the right video.
+        CFBundleURLTypes:
+          - CFBundleURLName: com.prism.client.deeplink
+            CFBundleURLSchemes: [prism]
 
   PrismTests:
     type: bundle.unit-test

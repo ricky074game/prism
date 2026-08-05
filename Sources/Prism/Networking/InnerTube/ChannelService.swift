@@ -103,6 +103,48 @@ actor ChannelService {
         return Self.parseTab(json, tab: tab)
     }
 
+    /// Every channel the signed-in account subscribes to.
+    ///
+    /// `FEchannels` on the account client, which returns the *whole* list —
+    /// 419 of them on the account this was built against — as `tileRenderer`s
+    /// carrying id, name, avatar and subscriber count. The subscription *feed*
+    /// is not a substitute: it only mentions channels that posted recently, so
+    /// a strip built from it silently omits everyone who has been quiet.
+    ///
+    /// Nothing in the list marks new uploads, so that has to come from
+    /// elsewhere — see `SubscriptionsModel`.
+    func subscriptions() async throws -> [Channel] {
+        let json = try await client.accountBrowse(browseID: "FEchannels")
+        var found: [Channel] = []
+        var seen = Set<String>()
+
+        walk(json, key: "tileRenderer") { tile in
+            guard let id = FeedParser.channelBrowseID(tile), seen.insert(id).inserted else { return }
+
+            let metadata = (tile["metadata"] as? [String: Any])?["tileMetadataRenderer"] as? [String: Any]
+            guard let name = (metadata?["title"] as? [String: Any])?["simpleText"] as? String,
+                  !name.isEmpty
+            else { return }
+
+            // The lines are a handle and a subscriber count, in no fixed order.
+            var handle: String?, subscribers: String?
+            walk(metadata ?? [:], key: "lineItemRenderer") { item in
+                guard let text = (item["text"] as? [String: Any])?["simpleText"] as? String else { return }
+                if text.hasPrefix("@") { handle = text }
+                else if text.localizedCaseInsensitiveContains("subscriber") { subscribers = text }
+            }
+
+            found.append(Channel(
+                id: id,
+                name: name,
+                handle: handle,
+                thumbnailURL: firstImageURL(tile["header"]),
+                subscriberText: subscribers
+            ))
+        }
+        return found
+    }
+
     /// Uploads, for the shuffle button.
     func randomVideo(channelID: String) async throws -> Video? {
         let contents = try await tab(channelID: channelID, tab: .videos)

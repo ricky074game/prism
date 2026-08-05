@@ -3,7 +3,7 @@ import SwiftUI
 @MainActor
 @Observable
 final class SubscriptionsModel {
-    private(set) var channels: [Channel] = []
+    private(set) var channels: [SubscribedChannel] = []
     private(set) var videos: [Video] = []
     private(set) var isLoading = false
     private(set) var error: String?
@@ -32,10 +32,36 @@ final class SubscriptionsModel {
             let page = try await FeedRepository.shared.feed(.subscriptions)
             videos = page.videos
 
+            // The full list, and which of them have posted recently.
+            //
+            // Two sources because neither has both halves: the channel list
+            // carries no "new uploads" flag, and the feed only mentions
+            // channels that posted. A channel is dotted when it appears in the
+            // feed, and dotted channels sort to the front — which is the
+            // ordering that makes the strip worth glancing at.
+            let all = (try? await ChannelService.shared.subscriptions()) ?? []
+            let fresh = Set(page.videos.map(\.channelID).filter { !$0.isEmpty })
+
+            channels = all
+                .map { SubscribedChannel(channel: $0, hasNewVideos: fresh.contains($0.id)) }
+                .sorted { lhs, rhs in
+                    lhs.hasNewVideos == rhs.hasNewVideos
+                        ? lhs.channel.name.localizedCaseInsensitiveCompare(rhs.channel.name) == .orderedAscending
+                        : lhs.hasNewVideos
+                }
+
         } catch {
             self.error = (error as? LocalizedError)?.errorDescription ?? "Couldn't load your subscriptions."
         }
     }
+}
+
+/// A subscribed channel, plus whether it's posted anything in the current feed.
+struct SubscribedChannel: Identifiable, Hashable {
+    let channel: Channel
+    let hasNewVideos: Bool
+
+    var id: String { channel.id }
 }
 
 struct SubscriptionsScreen: View {
@@ -110,21 +136,41 @@ struct SubscriptionsScreen: View {
     private var channelStrip: some View {
         ScrollView(.horizontal) {
             HStack(spacing: Metrics.Space.lg) {
-                ForEach(model.channels) { channel in
-                    VStack(spacing: Metrics.Space.sm) {
-                        RemoteImage(url: channel.thumbnailURL, targetSize: CGSize(width: 120, height: 120)) {
-                            Circle().fill(Palette.surfaceRaised)
-                        }
-                        .frame(width: 52, height: 52)
-                        .clipShape(Circle())
-                        .overlay(Circle().strokeBorder(Palette.line))
+                ForEach(model.channels) { entry in
+                    Button {
+                        router.openChannel(id: entry.channel.id, name: entry.channel.name)
+                    } label: {
+                        VStack(spacing: Metrics.Space.sm) {
+                            RemoteImage(url: entry.channel.thumbnailURL, targetSize: CGSize(width: 120, height: 120)) {
+                                Circle().fill(Palette.surfaceRaised)
+                            }
+                            .frame(width: 52, height: 52)
+                            .clipShape(Circle())
+                            .overlay(Circle().strokeBorder(Palette.line))
+                            // The dot marks a channel that's in the current
+                            // feed. Drawn outside the avatar's clip so it isn't
+                            // cropped by the circle.
+                            .overlay(alignment: .topTrailing) {
+                                if entry.hasNewVideos {
+                                    Circle()
+                                        .fill(Palette.refract)
+                                        .frame(width: 11, height: 11)
+                                        .overlay(Circle().strokeBorder(Palette.ink, lineWidth: 2))
+                                        .offset(x: 2, y: -2)
+                                }
+                            }
 
-                        Text(channel.name)
-                            .font(Type.labelSmall)
-                            .foregroundStyle(Palette.textSecondary)
-                            .lineLimit(1)
-                            .frame(maxWidth: 64)
+                            Text(entry.channel.name)
+                                .font(Type.labelSmall)
+                                .foregroundStyle(entry.hasNewVideos ? Palette.textPrimary : Palette.textSecondary)
+                                .lineLimit(1)
+                                .frame(maxWidth: 64)
+                        }
                     }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(entry.hasNewVideos
+                        ? "\(entry.channel.name), new videos"
+                        : entry.channel.name)
                 }
             }
             .padding(.horizontal, layout.gutter)

@@ -152,11 +152,9 @@ struct SubscriptionsScreen: View {
 /// Shown when nobody is signed in.
 ///
 /// It states exactly what signing in does and does not do, because the honest
-/// answer is narrower than people expect — it reads the subscription list, and
+/// answer is narrower than people expect — it reads your subscription feed, and
 /// it does not personalise the home feed.
 struct SignInPrompt: View {
-    @State private var auth = GoogleAuth.shared
-
     var body: some View {
         VStack(spacing: Metrics.Space.lg) {
             PrismMark().frame(width: 40, height: 40)
@@ -167,48 +165,27 @@ struct SignInPrompt: View {
                     .foregroundStyle(Palette.textPrimary)
                     .multilineTextAlignment(.center)
 
-                Text("Prism reads your subscription list from your Google account. Your tokens stay in this device's Keychain and are never sent anywhere else.")
+                Text("Prism reads your subscription feed from your YouTube account. Your tokens stay in this device's Keychain and are never sent anywhere else.")
                     .font(Type.meta)
                     .foregroundStyle(Palette.textSecondary)
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
             }
 
-            if auth.isConfigured {
-                Button {
-                    Task { await auth.signIn() }
-                } label: {
-                    HStack(spacing: Metrics.Space.sm) {
-                        if auth.isAuthenticating {
-                            ProgressView().tint(Palette.ink).controlSize(.small)
-                        }
-                        Text(auth.isAuthenticating ? "Signing in…" : "Sign in with Google")
-                            .font(Type.label)
-                    }
+            // Goes to the account screen rather than starting the flow here.
+            // Signing in is a device-code exchange — a code to read and a page
+            // to open on another device — and that needs somewhere to live.
+            // The button used to say sign-in "isn't set up in this build",
+            // which was only ever true of the optional Cloud client.
+            NavigationLink {
+                AccountScreen()
+            } label: {
+                Text("Sign in")
+                    .font(Type.label)
                     .foregroundStyle(Palette.ink)
                     .padding(.horizontal, Metrics.Space.xl)
                     .padding(.vertical, Metrics.Space.md)
                     .background(Palette.refractGradient, in: Capsule())
-                }
-                .disabled(auth.isAuthenticating)
-            } else {
-                // Better than a button that opens a broken Google page.
-                VStack(spacing: Metrics.Space.xs) {
-                    Text("Sign-in isn't set up in this build")
-                        .font(Type.metaEmphasis)
-                        .foregroundStyle(Palette.textSecondary)
-                    Text("Add a Google OAuth client ID in Secrets.swift to enable it.")
-                        .font(Type.labelSmall)
-                        .foregroundStyle(Palette.textTertiary)
-                        .multilineTextAlignment(.center)
-                }
-                .padding(.top, Metrics.Space.xs)
-            }
-
-            if let error = auth.error {
-                Text(error)
-                    .font(Type.labelSmall)
-                    .foregroundStyle(Palette.warning)
             }
         }
         .padding(.horizontal, Metrics.Space.xxl)

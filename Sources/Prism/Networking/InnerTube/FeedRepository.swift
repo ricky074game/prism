@@ -147,5 +147,19 @@ actor FeedRepository {
         return FeedParser.videos(from: json).filter { $0.id != videoID }
     }
 
+    /// Whether the signed-in user already follows this video's channel.
+    ///
+    /// `nil` means "don't know" — signed out, or the request failed — which the
+    /// UI shows as the neutral Subscribe state rather than asserting that you
+    /// aren't subscribed.
+    func isSubscribed(toChannelOf videoID: String) async -> Bool? {
+        guard await AccountSession.shared.isSignedIn else { return nil }
+        guard let json = try? await client.accountNext(videoID: videoID) else { return nil }
+
+        var subscribed: Bool?
+        FeedParser.walkForSubscribeState(json) { subscribed = $0 }
+        return subscribed
+    }
+
     func clear() { cache.removeAll() }
 }

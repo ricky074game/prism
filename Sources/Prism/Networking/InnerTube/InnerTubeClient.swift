@@ -362,6 +362,47 @@ actor InnerTubeClient {
         try await post("next", body: ["videoId": videoID], profile: .web)
     }
 
+    /// The same call as the account, which is the only way to learn whether the
+    /// user is already subscribed to the channel.
+    ///
+    /// There is no cheaper source: the Data API would answer it in one call and
+    /// is switched off on the TV client's project, and the subscription feed
+    /// only lists channels that have posted recently — a channel you follow but
+    /// which has been quiet would read as "not subscribed", which is precisely
+    /// the bug this replaces.
+    func accountNext(videoID: String) async throws -> [String: Any] {
+        try await post("next", body: ["videoId": videoID], profile: .tv)
+    }
+
+    // MARK: Writes
+    //
+    // These go through InnerTube rather than the Data API for the same reason
+    // everything else does: the Data API is disabled on the TV client's Google
+    // project, so `videos/rate` and `subscriptions` return HTTP 403 no matter
+    // how valid the token is. Liking and subscribing were silently doing
+    // nothing.
+
+    func setSubscription(channelID: String, subscribed: Bool) async throws {
+        guard !channelID.isEmpty else { return }
+        _ = try await post(
+            subscribed ? "subscription/subscribe" : "subscription/unsubscribe",
+            body: ["channelIds": [channelID]],
+            profile: .tv
+        )
+    }
+
+    /// `rating` is `like`, `dislike` or `none`, matching the Data API's
+    /// vocabulary so call sites didn't have to change.
+    func rate(videoID: String, rating: String) async throws {
+        let path: String
+        switch rating {
+        case "like": path = "like/like"
+        case "dislike": path = "like/dislike"
+        default: path = "like/removelike"
+        }
+        _ = try await post(path, body: ["target": ["videoId": videoID]], profile: .tv)
+    }
+
     /// Redeems a continuation token — the next page of comments, replies, or a
     /// re-sorted comment list.
     func next(continuation: String) async throws -> [String: Any] {

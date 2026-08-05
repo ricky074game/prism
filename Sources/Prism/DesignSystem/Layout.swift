@@ -11,6 +11,10 @@ import SwiftUI
 struct PrismLayout: Equatable {
     var width: CGFloat = 390
     var height: CGFloat = 844
+    /// The home indicator's height. Supplied by `RootView` from the window,
+    /// because the tab bar's background extends under it and swallows taps
+    /// there — a feed's last cell needs to clear the bar *and* the indicator.
+    var safeBottom: CGFloat = 0
 
     /// The point where a side rail beats a bottom bar.
     ///
@@ -90,9 +94,16 @@ struct PrismLayout: Equatable {
     }
 
     /// Bottom padding a scroll view needs so its last row clears the tab bar.
-    /// With a side rail there is no bottom bar to clear.
+    ///
+    /// The home indicator counts. The tab bar draws its background under it, and
+    /// that background takes the taps, so 90pt of clearance against a 58pt bar
+    /// plus a 34pt indicator left the last cell in every feed looking tappable
+    /// and not being tappable. With a side rail there is no bottom bar at all,
+    /// but the indicator is still there.
     var bottomInset: CGFloat {
-        isWide ? Metrics.Space.xxl : TabBar.height + Metrics.Space.xxl
+        isWide
+            ? safeBottom + Metrics.Space.xxl
+            : TabBar.height + safeBottom + Metrics.Space.xxl
     }
 }
 

@@ -8,6 +8,9 @@ final class WatchModel {
     private(set) var related: [Video] = []
     private(set) var isLoading = true
     private(set) var error: String?
+    /// nil until known. The button starts neutral rather than claiming you
+    /// aren't subscribed to a channel you follow.
+    private(set) var isSubscribed: Bool?
 
     func load(video: Video, into player: PlayerEngine, settings: Settings) async {
         isLoading = true
@@ -47,6 +50,10 @@ final class WatchModel {
         player.segments = await segmentsTask
         related = await relatedTask ?? []
         isLoading = false
+
+        // Asked for after the video is up: it costs a second round-trip and
+        // nothing about playback waits on it.
+        isSubscribed = await FeedRepository.shared.isSubscribed(toChannelOf: video.id)
     }
 }
 
@@ -64,6 +71,7 @@ struct WatchScreen: View {
     @State private var isLiked = false
     @State private var isDisliked = false
     @State private var isSubscribed = false
+    @State private var knowsSubscription = false
     @State private var showDescription = false
     @State private var showComments = false
     @State private var isFullscreen = false
@@ -89,6 +97,13 @@ struct WatchScreen: View {
         .task {
             glow.load(video.thumbnailURL)
             await model.load(video: video, into: player, settings: settings)
+        }
+        // Seeded once, from the account. After that the local toggle owns it,
+        // so tapping Subscribe doesn't get overwritten by a late answer.
+        .onChange(of: model.isSubscribed) { _, actual in
+            guard let actual, !knowsSubscription else { return }
+            knowsSubscription = true
+            isSubscribed = actual
         }
     }
 
@@ -247,10 +262,6 @@ struct WatchScreen: View {
                     .background(Palette.warning.opacity(0.1), in: RoundedRectangle(cornerRadius: Metrics.Radius.md))
             }
 
-            if !player.segments.isEmpty {
-                SegmentSummary(segments: player.segments, duration: player.duration)
-            }
-
             if includingUpNext {
                 Divider().overlay(Palette.line)
                 upNext
@@ -327,7 +338,7 @@ struct WatchScreen: View {
                     Haptics.impact(.medium)
                     if isSignedIn {
                         Task {
-                            try? await YouTubeDataAPI.shared.rate(
+                            try? await InnerTubeClient.shared.rate(
                                 videoID: video.id,
                                 rating: isLiked ? "like" : "none"
                             )
@@ -342,7 +353,7 @@ struct WatchScreen: View {
                     Haptics.impact(.medium)
                     if isSignedIn {
                         Task {
-                            try? await YouTubeDataAPI.shared.rate(
+                            try? await InnerTubeClient.shared.rate(
                                 videoID: video.id,
                                 rating: isDisliked ? "dislike" : "none"
                             )
@@ -357,8 +368,8 @@ struct WatchScreen: View {
                     Haptics.impact(.medium)
                     if isSignedIn {
                         Task {
-                            try? await YouTubeDataAPI.shared.setSubscription(
-                                channelID: video.channelID,
+                            try? await InnerTubeClient.shared.setSubscription(
+                                channelID: model.source?.channelID ?? video.channelID,
                                 subscribed: isSubscribed
                             )
                         }
@@ -490,48 +501,6 @@ struct SkipToast: View {
         .padding(.vertical, Metrics.Space.md)
         .background(.ultraThinMaterial, in: Capsule())
         .overlay(Capsule().strokeBorder(segment.category.color.opacity(0.3)))
-    }
-}
-
-/// A legend for what the scrubber is showing — how much of this video isn't
-/// the video.
-struct SegmentSummary: View {
-    let segments: [SponsorSegment]
-    let duration: Double
-
-    private var grouped: [(category: SegmentCategory, total: Double)] {
-        Dictionary(grouping: segments.filter { !$0.isPointOfInterest && !$0.isFullVideo }, by: \.category)
-            .map { ($0.key, $0.value.reduce(0) { $0 + $1.duration }) }
-            .sorted { $0.total > $1.total }
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: Metrics.Space.md) {
-            HStack(spacing: 6) {
-                Image(systemName: "chart.bar.fill")
-                    .font(.system(size: 10, weight: .bold))
-                    .foregroundStyle(Palette.textTertiary)
-                Text("SEGMENTS")
-                    .font(Type.readoutSmall)
-                    .tracking(1)
-                    .foregroundStyle(Palette.textTertiary)
-            }
-
-            FlowRow(spacing: Metrics.Space.sm) {
-                ForEach(grouped, id: \.category) { item in
-                    HStack(spacing: 5) {
-                        Circle().fill(item.category.color).frame(width: 6, height: 6)
-                        Text(item.category.title).font(Type.labelSmall)
-                            .foregroundStyle(Palette.textSecondary)
-                        Text("\(Int(item.total))s").font(Type.readoutSmall)
-                            .foregroundStyle(Palette.textTertiary)
-                    }
-                    .padding(.horizontal, Metrics.Space.sm + 2)
-                    .padding(.vertical, 5)
-                    .background(Palette.surface, in: Capsule())
-                }
-            }
-        }
     }
 }
 

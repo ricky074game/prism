@@ -17,7 +17,11 @@ struct RootView: View {
         // than measuring for itself, so a Split View resize moves all of them
         // together and there's one place to change a breakpoint.
         GeometryReader { geo in
-            let layout = PrismLayout(width: geo.size.width, height: geo.size.height)
+            let layout = PrismLayout(
+                width: geo.size.width,
+                height: geo.size.height,
+                safeBottom: WindowInsets.bottom
+            )
 
             Group {
                 if layout.isWide {

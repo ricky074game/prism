@@ -218,6 +218,20 @@ enum FeedParser {
         return firstContinuation(in: json)
     }
 
+    /// Finds the watch page's subscribe button and reports its state.
+    ///
+    /// Confirmed against a live `next`: `subscribeButtonRenderer` carries both
+    /// `subscribed` and the `channelId` it applies to. Signed out it is always
+    /// false, which is why this is only consulted for a signed-in request.
+    static func walkForSubscribeState(_ json: [String: Any], _ body: (Bool) -> Void) {
+        var answered = false
+        harvest(json, key: "subscribeButtonRenderer") { r in
+            guard !answered, let state = r["subscribed"] as? Bool else { return }
+            answered = true
+            body(state)
+        }
+    }
+
     private static func firstContinuation(in root: Any) -> String? {
         var token: String?
         harvest(root, key: "continuationItemRenderer") { r in

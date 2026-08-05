@@ -78,9 +78,7 @@ struct WatchScreen: View {
     @State private var session = AccountSession.shared
     @State private var pip = PictureInPictureController()
 
-    /// Either sign-in enables the write actions. The YouTube sign-in now
-    /// requests the Data API scope too, so in practice this is that one.
-    private var isSignedIn: Bool { session.isSignedIn || GoogleAuth.shared.isSignedIn }
+    private var isSignedIn: Bool { session.isSignedIn }
 
     var body: some View {
         GeometryReader { geo in

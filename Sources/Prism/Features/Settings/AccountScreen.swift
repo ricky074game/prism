@@ -2,18 +2,18 @@ import SwiftUI
 
 /// Account sign-in.
 ///
-/// Two sign-ins exist and they do different things, which is confusing enough
-/// that the screen explains it rather than hiding it behind one button:
+/// One sign-in, doing everything: the age gate, history, Watch Later, the
+/// subscription feed, liking and subscribing.
 ///
-/// - **YouTube session** (cookies) — lifts the age gate, and makes history,
-///   Watch Later and the home feed personal.
-/// - **Google account** (OAuth) — subscriptions list, liking, playlist edits.
+/// It used to be two, because the second was assumed to be the only route to
+/// the YouTube Data API. It isn't a route to anything — that API is disabled on
+/// the TV client's Google project and answers every call with HTTP 403 — so the
+/// features were rebuilt on InnerTube and the second account, its OAuth client
+/// and its `Secrets.swift` configuration step were deleted.
 ///
-/// Most people want the first. It is also the one with real risk attached, so
-/// that risk is stated on the screen and not buried.
+/// This one carries real risk, so the screen states it rather than burying it.
 struct AccountScreen: View {
     @State private var session = AccountSession.shared
-    @State private var auth = GoogleAuth.shared
     @State private var showSignOutConfirm = false
     @State private var showConsent = false
 
@@ -21,7 +21,6 @@ struct AccountScreen: View {
         ScrollView {
             VStack(alignment: .leading, spacing: Metrics.Space.xxl) {
                 youtubeSession
-                googleAccount
                 risk
             }
             .padding(Metrics.gutter)
@@ -105,60 +104,6 @@ struct AccountScreen: View {
                     .font(Type.labelSmall)
                     .foregroundStyle(Palette.warning)
                     .padding(.bottom, Metrics.Space.md)
-            }
-        }
-    }
-
-    private var googleAccount: some View {
-        section(
-            "SEPARATE API CLIENT",
-            note: "Optional, and only for the subscription avatar strip. The sign-in above cannot reach the Data API — it is switched off on Google's own TV client project — so everything else comes from InnerTube instead and works without this."
-        ) {
-            if auth.isSignedIn {
-                statusRow(
-                    icon: "checkmark.circle.fill",
-                    tint: Palette.success,
-                    title: "Connected",
-                    detail: auth.account?.email ?? "Signed in"
-                )
-                Button(role: .destructive) {
-                    auth.signOut()
-                } label: {
-                    Text("Disconnect")
-                        .font(Type.label)
-                        .foregroundStyle(Palette.live)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.vertical, Metrics.Space.md)
-                }
-            } else if auth.isConfigured {
-                Button {
-                    Task { await auth.signIn() }
-                } label: {
-                    HStack(spacing: Metrics.Space.sm) {
-                        if auth.isAuthenticating {
-                            ProgressView().controlSize(.small).tint(Palette.textPrimary)
-                        }
-                        Text(auth.isAuthenticating ? "Signing in…" : "Connect Google account")
-                            .font(Type.label)
-                    }
-                    .foregroundStyle(Palette.textPrimary)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, Metrics.Space.md)
-                    .background(Palette.surfaceRaised, in: Capsule())
-                }
-                .disabled(auth.isAuthenticating)
-                .padding(.vertical, Metrics.Space.sm)
-            } else {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Not set up in this build")
-                        .font(Type.metaEmphasis)
-                        .foregroundStyle(Palette.textSecondary)
-                    Text("Add a Google OAuth client ID in Secrets.swift to enable it. The YouTube session above works without this.")
-                        .font(Type.labelSmall)
-                        .foregroundStyle(Palette.textTertiary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                .padding(.vertical, Metrics.Space.md)
             }
         }
     }

@@ -47,10 +47,9 @@ struct LibraryScreen: View {
     @Environment(Router.self) private var router
     @Environment(\.prismLayout) private var layout
     @State private var model = LibraryModel()
-    @State private var auth = GoogleAuth.shared
     @State private var session = AccountSession.shared
 
-    private var signedIn: Bool { session.isSignedIn || auth.isSignedIn }
+    private var signedIn: Bool { session.isSignedIn }
 
     var body: some View {
         ScrollView {

@@ -22,8 +22,8 @@ by walking into it.
 
 On the scrubber above: the played portion runs violet to cyan, then rose marks a
 sponsor, a violet tick a subscribe reminder, amber a self-promotion, and cyan the
-outro. The same colours label the segment list below the video, so the setting
-and its effect are visibly the same object.
+outro. The same colours are used wherever a category is named in Settings, so
+the setting and its effect are visibly the same object.
 
 Universal, and not by stretching — the same build on an iPad Pro:
 
@@ -214,13 +214,42 @@ Sources/Prism/
 
 ## Signing in
 
-There are two sign-ins, and they are not the same thing — which is why the app
-shows them separately instead of behind one button.
+One sign-in — TV device-code OAuth — and it covers everything: age-restricted
+videos, watch history, Watch Later, the subscription feed, liking and
+subscribing.
 
-| | Mechanism | Unlocks |
-|---|---|---|
-| **YouTube account** | TV device-code OAuth → `Bearer` | age-restricted videos, watch history, Watch Later, a personal home feed |
-| **Google account** | OAuth 2.0 + PKCE | subscription list, liking, subscribing, playlist edits |
+There used to be a second, a self-registered Cloud OAuth client, on the
+assumption that the YouTube Data API was the only route to subscriptions and
+likes. It is a route to nothing. **Data API v3 is disabled on the TV client's
+Google project** and answers every call with HTTP 403 — not a quota, not a
+scope, and not a project anyone but Google can enable:
+
+```
+GET /youtube/v3/subscriptions?mine=true
+403  "YouTube Data API v3 has not been used in project 861556708454
+      before or it is disabled"
+```
+
+So those features were rebuilt on InnerTube, and the second account, its OAuth
+client and the `Secrets.swift` configuration step were deleted outright.
+
+### The token belongs to one client
+
+The `Bearer` is issued to YouTube's TV OAuth client, and InnerTube validates it
+against the client each request claims to be. Sent with any other client it
+doesn't get ignored — the whole request fails:
+
+```
+browse FEhistory   WEB        no token   HTTP 200
+browse FEhistory   WEB        token      HTTP 400  invalid argument
+player             VISIONOS   token      HTTP 400
+```
+
+Attaching it everywhere therefore broke playback and the feed the moment anyone
+signed in, and every failure was swallowed by a `try?` and rendered as "empty".
+`InnerTubeClientProfile.isAccountClient` is what keeps it to the one client that
+accepts it; account surfaces go through `accountBrowse` / `accountNext`, and
+those answer in `tileRenderer`, which shares no shape with the other formats.
 
 ### Why not cookies
 
@@ -268,18 +297,13 @@ breaks YouTube's Terms of Service, and accounts have been flagged for it. The
 app says so on the sign-in screen. Use a secondary account if that would cost
 you something.
 
-To enable the Google-account half, register an iOS OAuth client (bundle ID
-must match `PRODUCT_BUNDLE_IDENTIFIER` in `project.yml`) in Google Cloud
-Console and put the ID in `Secrets.swift`.
-The consent screen can stay in Testing mode — no verification needed. The
-YouTube sign-in works without any of that.
 
 ## Status
 
 Working: home feed, search, watch with HLS playback, SponsorBlock skipping,
 Shorts, channels with community posts, comments, playlists, library (history,
 liked, Watch Later), chapters, quality selection, likes, Picture in Picture,
-background audio, both sign-ins. Universal — iPhone and iPad.
+background audio, sign-in. Universal — iPhone and iPad.
 
 A channel's Shorts tab opens the vertical feed at the one you tapped and keeps
 scrolling into the rest of that creator's shorts, rather than dropping you into

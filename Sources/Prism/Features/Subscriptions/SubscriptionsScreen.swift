@@ -13,13 +13,7 @@ final class SubscriptionsModel {
             videos = DemoData.videos
             return
         }
-        // Either sign-in will do. Gating on `GoogleAuth` alone made this screen
-        // permanently empty: that path needs a Cloud OAuth client in
-        // `Secrets.swift`, which ships blank, so `isSignedIn` is always false.
-        // Meanwhile the device flow already requests the Data API scope and
-        // `YouTubeDataAPI` already prefers its token — the screen was refusing
-        // to ask for data it could have had.
-        guard AccountSession.shared.isSignedIn || GoogleAuth.shared.isSignedIn else { return }
+        guard AccountSession.shared.isSignedIn else { return }
 
         isLoading = true
         error = nil
@@ -38,13 +32,6 @@ final class SubscriptionsModel {
             let page = try await FeedRepository.shared.feed(.subscriptions)
             videos = page.videos
 
-            // The Data API still owns the channel list, when it's available —
-            // it needs a Cloud client, so this is empty for most people and the
-            // avatar strip simply doesn't appear.
-            if GoogleAuth.shared.isSignedIn,
-               let (channels, _) = try? await YouTubeDataAPI.shared.subscriptions() {
-                self.channels = channels
-            }
         } catch {
             self.error = (error as? LocalizedError)?.errorDescription ?? "Couldn't load your subscriptions."
         }
@@ -55,12 +42,9 @@ struct SubscriptionsScreen: View {
     @Environment(Router.self) private var router
     @Environment(\.prismLayout) private var layout
     @State private var model = SubscriptionsModel()
-    @State private var auth = GoogleAuth.shared
     @State private var session = AccountSession.shared
 
-    /// The screen only needs *an* account, and the device flow is the one that
-    /// actually works without a Cloud project.
-    private var signedIn: Bool { session.isSignedIn || auth.isSignedIn }
+    private var signedIn: Bool { session.isSignedIn }
 
     var body: some View {
         ScrollView {

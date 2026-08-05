@@ -9,16 +9,11 @@ import SwiftUI
 struct SettingsScreen: View {
     @Environment(Settings.self) private var settings
     @State private var session = AccountSession.shared
-    @State private var auth = GoogleAuth.shared
 
-    /// Says which of the two sign-ins are active, because "Signed in" alone
-    /// would be ambiguous when they unlock different things.
     private var accountStatus: (title: String, detail: String) {
-        switch (session.isSignedIn, auth.isSignedIn) {
-        case (true, _): ("Signed in", "History, subscriptions and age-restricted videos")
-        case (false, true): ("Partly signed in", "API client only — no age-restricted videos")
-        case (false, false): ("Not signed in", "Sign in for history and age-restricted videos")
-        }
+        session.isSignedIn
+            ? ("Signed in", "History, subscriptions and age-restricted videos")
+            : ("Not signed in", "Sign in for history and age-restricted videos")
     }
 
     var body: some View {
